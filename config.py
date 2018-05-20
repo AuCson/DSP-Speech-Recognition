@@ -6,9 +6,7 @@ global config and meta info
 """
 import wave
 import logging
-import random
 
-random.seed(19970920)
 
 class Meta:
     def __init__(self):
@@ -28,6 +26,7 @@ class Config:
         self.data_dir = './data/'
         self.val_instance = 0.2
         self.val_person = 0.1
+        self.frame = 0.02
 
 global_config = Config()
 global_meta = Meta()

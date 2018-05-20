@@ -7,7 +7,7 @@ import math
 import logging
 import numpy as np
 
-def to_frames(sig, rate, t=0.020):
+def to_frames(sig, rate, t=0.020, step=0.010):
     """
     framing a signal
     :param sig:
@@ -15,13 +15,7 @@ def to_frames(sig, rate, t=0.020):
     :param t: 
     :return: 
     """
-    frames = []
-    s = 0
-    p = int(rate * t)
-    while s < sig.shape[0]:
-        frames.append(sig[s:min(s+p, sig.shape[0])])
-        s += p
-    return frames
+    return framesig(sig, int(rate*t),int(step*rate))
 
 def round_half_up(number):
     return int(decimal.Decimal(number).quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_UP))
