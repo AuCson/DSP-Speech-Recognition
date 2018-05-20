@@ -10,7 +10,7 @@ class Reader:
         self.data_dir = ''
         self.train, self.val_person, self.val_inst = self.data_split()
 
-    def read_one(self, file_name):
+    def read_one(self, file_name='data/15307130053-15-15.wav'):
         rate, sig = wav.read(file_name)
         return rate, sig
 
@@ -55,7 +55,7 @@ class Reader:
             except Exception:
                 print('fail to read %s' % file)
                 continue
-            #sig = sig[:0] # single channel
+            sig = sig[:,0] # single channel
             labels.append(label)
             feat.append((sig,rate))
         return feat, labels
@@ -68,4 +68,12 @@ class Reader:
             l = files[s:min(len(files), s+batch_size)]
             s += batch_size
             yield s, len(files), self.read_data(l)
+
+    def iterator(self, files,verbose=True):
+        random.shuffle(files)
+        for file in files:
+            if verbose:
+                print(file)
+            feat, labels = self.read_data([file])
+            yield feat[0],labels[0]
 

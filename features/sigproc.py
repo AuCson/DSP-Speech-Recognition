@@ -5,7 +5,23 @@ import decimal
 import numpy
 import math
 import logging
+import numpy as np
 
+def to_frames(sig, rate, t=0.020):
+    """
+    framing a signal
+    :param sig:
+    :param rate
+    :param t: 
+    :return: 
+    """
+    frames = []
+    s = 0
+    p = int(rate * t)
+    while s < sig.shape[0]:
+        frames.append(sig[s:min(s+p, sig.shape[0])])
+        s += p
+    return frames
 
 def round_half_up(number):
     return int(decimal.Decimal(number).quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_UP))
@@ -121,7 +137,7 @@ def logpowspec(frames, NFFT, norm=1):
     :param norm: If norm=1, the log power spectrum is normalised so that the max value (across all frames) is 0.
     :returns: If frames is an NxD matrix, output will be Nx(NFFT/2+1). Each row will be the log power spectrum of the corresponding frame.
     """
-    ps = powspec(frames, NFFT);
+    ps = powspec(frames, NFFT)
     ps[ps <= 1e-30] = 1e-30
     lps = 10 * numpy.log10(ps)
     if norm:
