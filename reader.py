@@ -78,19 +78,21 @@ class Reader:
     def mini_batch_iterator(self, files, batch_size=None):
         batch_size = cfg.batch_size if batch_size is None else batch_size
         s = 0
-        random.shuffle(files)
+        random.Random(0).shuffle(files)
         while s < len(files):
             l = files[s:min(len(files), s+batch_size)]
             s += batch_size
-            yield s, len(files), self.read_data(l)
+            feat, labels = self.read_data(l)
+            yield s, len(files), feat, labels, l
 
     def iterator(self, files,verbose=True):
         print(files[0], len(files))
         random.Random(0).shuffle(files)
-        for file in files:
+        for s,file in enumerate(files):
             if verbose:
                 print(file)
             feat, labels = self.read_data([file])
             if not feat:
                 continue
-            yield feat[0],labels[0], file
+            yield s, 1, feat[0],labels[0], file
+

@@ -1,5 +1,5 @@
 import numpy as np
-from python_speech_features import mfcc, delta
+from features import mfcc, delta, to_frames
 from config import *
 from reader import Reader
 from sklearn.linear_model import SGDClassifier
@@ -9,18 +9,18 @@ import pickle
 from rnn_clf import RNN
 import torch
 from torch.autograd import Variable
+from features.endpoint import basic_endpoint_detection
+import plotter
 
 class _ModelBase:
     def __init__(self):
         self.reader = Reader()
 
-
-
-
-class RNNModel(_ModelBase):
-    def __init__(self):
-        super().__init__()
-        self.clf = RNN()
+    def deviation(self, arr):
+        l = []
+        for i in range(len(arr)-1):
+            l.append(arr[i+1]-arr[i])
+        return np.array(l)
 
     def pad(self, feat):
         if feat.shape[0] < 400:
@@ -29,18 +29,40 @@ class RNNModel(_ModelBase):
             feat = feat[:400]
         return feat
 
+    def feature_extract(self, sig, rate):
+        """
+        extract every features for training
+        :return: 
+        """
+        left, right = basic_endpoint_detection(sig, rate)
+        sound = sig[left:right]
+        mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=1024)
+        #plotter.plot_mfcc(mfcc0)
+        mfcc0 = delta(mfcc0,3)
+        mfcc1 = self.deviation(mfcc0)
+        mfcc2 = self.deviation(mfcc1)
+        return self.pad(mfcc0), self.pad(mfcc1), self.pad(mfcc2), len(mfcc0), len(mfcc1), len(mfcc2)
+
+
+class RNNModel(_ModelBase):
+    def __init__(self):
+        super().__init__()
+        self.clf = RNN()
+
     def train(self):
+        #train_data = self.reader.mini_batch_iterator(self.reader.train)
         train_data = self.reader.mini_batch_iterator(self.reader.train)
         optim = torch.optim.Adam(self.clf.parameters())
         criterion = torch.nn.CrossEntropyLoss()
-        for itr, total_iter, (feat, label) in train_data:
+        for itr, total_iter, feat, label, files in train_data:
             optim.zero_grad()
-            mfcc_feat = [self.pad(mfcc(robust_scale(sig), rate, nfft=512, winlen=0.01)) for sig, rate in feat]
-            d_mfcc_feat = np.stack([delta(_, 3) for _ in mfcc_feat]) # [B,T,H]
-            d_mfcc_feat = d_mfcc_feat.transpose((1,0,2))
-            input = Variable(torch.from_numpy(d_mfcc_feat).float())
+            features = [self.feature_extract(a,b) for a,b in feat]
+            features = [np.array(_) for _ in zip(*features)]
+            mfcc0, mfcc1, mfcc2 = Variable(torch.from_numpy(features[0]).float()), Variable(torch.from_numpy(features[1]).float()),\
+                                Variable(torch.from_numpy(features[2]).float())
+            mfcc0, mfcc1, mfcc2 = mfcc0.transpose(0,1), mfcc1.transpose(0,1), mfcc2.transpose(0,1)
             label = Variable(torch.LongTensor(label))
-            out = self.clf(input)
+            out = self.clf(mfcc0, mfcc1, mfcc2, features[3])
             loss = criterion(out, label)
             loss.backward()
             optim.step()
@@ -71,7 +93,7 @@ class RNNModel(_ModelBase):
 if __name__ == '__main__':
     m = RNNModel()
 
-    state_dict = torch.load('toy.pkl')
-    m.clf.load_state_dict(state_dict)
+    #state_dict = torch.load('toy.pkl')
+    #m.clf.load_state_dict(state_dict)
     for i in range(10):
         m.train()

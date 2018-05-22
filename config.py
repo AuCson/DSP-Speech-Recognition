@@ -27,6 +27,7 @@ class Config:
         self.val_instance = 0.2
         self.val_person = 0.1
         self.frame = 0.02
+        self.step = 0.01
 
 global_config = Config()
 global_meta = Meta()
