@@ -36,8 +36,10 @@ def basic_endpoint_detection(sig, rate):
     zcr = get_zcr(frames)
     left2, right2 = zcr_rule(zcr, left, right)
     #plot_frame(zcr, where='313')
-    #plot_frame(amp, where='312', sep=[left,right,left2,right2], show=True)
-
+    #plot_frame(amp, where='312', sep=[left,right,left2,right2])
+    if right2 - left2 < 50:
+        left2 = 0
+        right2 = len(frames)
     return int(left2 / cfg.step), int(right2 / cfg.step)
 
 def get_amplitude(frames, window='dirc', use_sq=False):
@@ -76,19 +78,19 @@ def amplitude_rule(amp, mh=0.25, th=0.100, l_sil=0.100, r_sil=0.100, sigma=3):
     T_H = th / cfg.frame
     M_L = s_mean + sigma * s_sigma
     M_H = max(np.max(amp) * mh, M_L)
-    print(M_H,M_L)
+    #print(M_H,M_L)
     i = 0
     while i < len(amp):
         if amp[i] >= M_H:
             j = k = i
-            while amp[k] > M_H and k < len(amp):
+            while k < len(amp) and amp[k] > M_H:
                 k += 1
             if k - j < T_H:
                 i = k
             else:
-                while amp[j] > M_L and j >= 0:
+                while j > 0 and amp[j] > M_L:
                     j -= 1
-                while amp[k] > M_L and k < len(amp):
+                while k < len(amp) and amp[k] > M_L:
                     k += 1
                 p.append((j,k))
                 i = k
@@ -105,11 +107,14 @@ def get_zcr(frames):
     :return: 
     """
     zpr = []
+    #frames = frames.tolist()
     for frame in frames:
         c = 0
-        for i in range(len(frame)-1):
-            if frame[i] * frame[i+1] < 0:
-                c += 1
+        arr1 = frame[:-1] * frame[1:] < 0
+        #for i in range(len(frame)-1):
+        #    if frame[i] > 0 and frame[i+1] < 0 or frame[i] < 0 and frame[i+1] > 0:
+        #        c += 1
+        c = (arr1 == True).sum()
         zpr.append(c)
     return zpr
 
@@ -128,7 +133,7 @@ def zcr_rule(zcr, left, right, max_shift=0.400, l_sil=0, r_sil=0.100):
     mu, sigma = np.mean(sil), np.std(sil)
     thres = mu + 3 * sigma
     j = left
-    while j >= 0 and left - j <= max_shift and zcr[j] > thres:
+    while j > 0 and left - j <= max_shift and zcr[j] > thres:
         j -= 1
     k = right
     while k < len(zcr) and k - right <= max_shift and zcr[k] > thres:

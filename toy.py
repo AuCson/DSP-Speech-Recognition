@@ -14,7 +14,7 @@ import plotter
 
 class _ModelBase:
     def __init__(self):
-        self.reader = Reader()
+        self.reader = Reader(debug=False)
 
     def deviation(self, arr):
         l = []
@@ -29,7 +29,7 @@ class _ModelBase:
             feat = feat[:400]
         return feat
 
-    def feature_extract(self, sig, rate):
+    def feature_extract(self, sig, rate, filename):
         """
         extract every features for training
         :return: 
@@ -38,6 +38,7 @@ class _ModelBase:
         sound = sig[left:right]
         mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=1024)
         #plotter.plot_mfcc(mfcc0)
+        #plotter.show(True, filename[:-4])
         mfcc0 = delta(mfcc0,3)
         mfcc1 = self.deviation(mfcc0)
         mfcc2 = self.deviation(mfcc1)
@@ -56,7 +57,7 @@ class RNNModel(_ModelBase):
         criterion = torch.nn.CrossEntropyLoss()
         for itr, total_iter, feat, label, files in train_data:
             optim.zero_grad()
-            features = [self.feature_extract(a,b) for a,b in feat]
+            features = [self.feature_extract(a,b,filename) for (a,b),filename in zip(feat,files)]
             features = [np.array(_) for _ in zip(*features)]
             mfcc0, mfcc1, mfcc2 = Variable(torch.from_numpy(features[0]).float()), Variable(torch.from_numpy(features[1]).float()),\
                                 Variable(torch.from_numpy(features[2]).float())
@@ -67,7 +68,8 @@ class RNNModel(_ModelBase):
             loss.backward()
             optim.step()
             print('%d/%d loss:%f' % (itr,total_iter,loss.data[0]))
-        f = open('toy.pkl', 'wb')
+            #break
+        f = open('models/toy.pkl', 'wb')
         torch.save(self.clf.state_dict(), f)
         f.close()
 
@@ -97,3 +99,4 @@ if __name__ == '__main__':
     #m.clf.load_state_dict(state_dict)
     for i in range(10):
         m.train()
+        #break

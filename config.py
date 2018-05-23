@@ -22,6 +22,7 @@ class Meta:
 
 class Config:
     def __init__(self):
+        self.cuda = False
         self.batch_size = 32
         self.data_dir = './data/'
         self.val_instance = 0.2
