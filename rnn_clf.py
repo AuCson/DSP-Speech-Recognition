@@ -58,7 +58,7 @@ class RNN(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        self.enc = DynamicEncoder(39, 100, n_layers=1, dropout=0.5, bidir=True)
+        self.enc = DynamicEncoder(39,100,1,0.0)
         self.out = nn.Linear(200,20)
 
     def forward(self, mfcc0, mfcc1, mfcc2, len0):
@@ -72,7 +72,7 @@ class RNN(nn.Module):
         #sum_enc_out = enc_out.sum(0)
         #avg_pool = sum_enc_out / len0_v.unsqueeze(1)
         #max_pool,_ = torch.max(enc_out,0)
-        out = self.out(torch.cat([hidden[0], hidden[1]], dim=1))
+        out = self.out(torch.cat([hidden[0],hidden[1]], dim=1))
         return out
 
 class HRNN(nn.Module):

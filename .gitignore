@@ -3,3 +3,5 @@ models/
 .idea/
 *.pyc
 img*/
+log/
+*.zip

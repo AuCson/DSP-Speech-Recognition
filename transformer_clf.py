@@ -11,6 +11,20 @@ import numpy as np
 
 __author__ = "Yu-Hsiang Huang"
 
+class TransformerEncoder(nn.Module):
+    ''' Compose with two layers '''
+
+    def __init__(self, d_model, d_inner_hid, n_head, d_k, d_v, dropout=0.1):
+        super().__init__()
+        self.slf_attn = MultiHeadAttention(n_head, d_model, d_k, d_v, dropout=dropout)
+        self.pos_ffn = PositionwiseFeedForward(d_model, d_inner_hid, dropout=dropout)
+
+    def forward(self, enc_input, slf_attn_mask=None):
+        enc_output, enc_slf_attn = self.slf_attn(
+            enc_input, enc_input, enc_input, attn_mask=slf_attn_mask)
+        enc_output = self.pos_ffn(enc_output)
+        return enc_output, enc_slf_attn
+
 class Linear(nn.Module):
     ''' Simple Linear layer with xavier init '''
     def __init__(self, d_in, d_out, bias=True):
@@ -70,10 +84,6 @@ class BatchBottle(nn.Module):
         out = super(BatchBottle, self).forward(input.view(-1, size[0]*size[1]))
         return out.view(-1, size[0], size[1])
 
-class BottleLayerNormalization(BatchBottle, LayerNormalization):
-    ''' Perform the reshape routine before and after a layer normalization'''
-    pass
-
 class ScaledDotProductAttention(nn.Module):
     ''' Scaled Dot-Product Attention '''
 
@@ -102,20 +112,6 @@ class ScaledDotProductAttention(nn.Module):
 
         return output, attn
 
-class EncoderLayer(nn.Module):
-    ''' Compose with two layers '''
-
-    def __init__(self, d_model, d_inner_hid, n_head, d_k, d_v, dropout=0.1):
-        super(EncoderLayer, self).__init__()
-        self.slf_attn = MultiHeadAttention(
-            n_head, d_model, d_k, d_v, dropout=dropout)
-        self.pos_ffn = PositionwiseFeedForward(d_model, d_inner_hid, dropout=dropout)
-
-    def forward(self, enc_input, slf_attn_mask=None):
-        enc_output, enc_slf_attn = self.slf_attn(
-            enc_input, enc_input, enc_input, attn_mask=slf_attn_mask)
-        enc_output = self.pos_ffn(enc_output)
-        return enc_output, enc_slf_attn
 
 class MultiHeadAttention(nn.Module):
     ''' Multi-Head Attention module '''

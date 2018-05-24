@@ -22,12 +22,12 @@ def plot_frame(frames,frame_len=1,name='frames',where='111',show=False, sep=None
     if show:
         plt.show()
 
-def plot_mfcc(mfcc):
-    fig, ax = plt.subplots()
+def plot_mfcc(mfcc, where, show=False):
+    plt.subplot(where)
     mfcc_data = np.swapaxes(mfcc, 0, 1)
-    cax = ax.imshow(mfcc_data, interpolation='nearest', cmap=cm.coolwarm, origin='lower')
-    ax.set_title('MFCC')
-    plt.show()
+    plt.imshow(mfcc_data, interpolation='nearest', cmap=cm.coolwarm, origin='lower')
+    if show:
+        plt.show()
 
 def show(save=False, f=None):
     if not save:
