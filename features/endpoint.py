@@ -36,7 +36,7 @@ def basic_endpoint_detection(sig, rate):
     zcr = get_zcr(frames)
     left2, right2 = zcr_rule(zcr, left, right)
     #plot_frame(zcr, where='313')
-    #plot_frame(amp, where='212', sep=[left,right,left2,right2])
+    plot_frame(amp, where='211', sep=[left,right,left2,right2])
 
     if right2 - left2 < 50:
         left2 = 0
@@ -145,7 +145,7 @@ if __name__ == '__main__':
     r = Reader(debug=False)
     itr = r.iterator(r.val_person)
     for idx, l, (sig, rate), label, filename in itr:
-        plot_frame(sig,where='211',show=False)
+        #plot_frame(sig,where='211',show=False)
         print(label)
         #sig = preemphasis(sig)
         basic_endpoint_detection(sig, rate)

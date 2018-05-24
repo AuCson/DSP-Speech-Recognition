@@ -29,6 +29,7 @@ def plot_mfcc(mfcc, where, show=False):
     if show:
         plt.show()
 
+
 def show(save=False, f=None):
     if not save:
         plt.show()

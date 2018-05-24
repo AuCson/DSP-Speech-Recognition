@@ -7,6 +7,7 @@ import math
 import logging
 import numpy as np
 
+
 def to_frames(sig, rate, t=0.020, step=0.010):
     """
     framing a signal
@@ -15,7 +16,35 @@ def to_frames(sig, rate, t=0.020, step=0.010):
     :param t: 
     :return: 
     """
-    return framesig(sig, int(rate*t),int(step*rate))
+    return framesig(sig, int(rate * t), int(step * rate))
+
+
+def window(sig, rate, thres, nfft, wintype='square'):
+    """
+    add a window to the signal.
+    low-pass filter
+    do not care about phase
+    :param winlen: in sec
+    :param nfft: 
+    :param sig: [N]
+    :param thres: stop freq 
+    :param rate: sampling rate
+    :param wintype:
+    :return: 
+    """
+    # ideal filter H_d(w)
+    N = len(sig)
+    wc = np.ones(int(thres / rate * N))
+    Hd_w = np.pad(wc,((0, N-len(wc))),'constant',constant_values=(0,0))
+    # back into time space
+    hd_w = np.fft.ifft(Hd_w, N)
+    # add window
+    w = np.ones(N)
+    if wintype == 'hamming':
+        w = np.hamming(N)
+    h_w = 2 * np.pi * w * hd_w
+    sig = np.convolve(sig, h_w)[:N]
+    return sig
 
 def round_half_up(number):
     return int(decimal.Decimal(number).quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_UP))

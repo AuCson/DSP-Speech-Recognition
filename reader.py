@@ -89,8 +89,8 @@ class Reader:
         print(files[0], len(files))
         random.Random(0).shuffle(files)
         for s,file in enumerate(files):
-            if verbose:
-                print(file)
+            #if verbose:
+            #    print(file)
             feat, labels = self.read_data([file])
             if not feat:
                 continue

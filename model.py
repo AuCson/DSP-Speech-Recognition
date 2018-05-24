@@ -40,6 +40,7 @@ class _ModelBase:
         audio = reg.match(filename).group(2)
         left, right = basic_endpoint_detection(sig, rate)
         sound = sig[left:right].reshape(-1,1)
+        plotter.plot_frame(sound, show=True)
         mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=1024)
         mfcc0 = delta(mfcc0,3)
         mfcc1 = self.deviation(mfcc0,5)
