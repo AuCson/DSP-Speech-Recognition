@@ -20,22 +20,24 @@ from sklearn.metrics import accuracy_score
 import pickle
 
 
-def pitch_feature(sig, rate):
+def pitch_feature(sig, rate, gender='male'):
     """
     Main call function for pitch features
     :param sig: signal after endpoint detection
     :param rate: 
     :return: 
     """
-    pitch, frames = pitch_detect(sig, rate)
+
+    pitch, frames = pitch_detect(sig, rate, gender=gender)
     # xi, yi, meanshift, slope_a, slope_b = find_smooth_subsequence(pitch)
     p = sub_endpoint_detect(frames)
 
     strs_1, str_idx_1 = find_smooth_subsequence(pitch[:p],base_tor=4)
     strs_2, str_idx_2 = find_smooth_subsequence(pitch[p:],base_tor=4, bias=p)
+    l1,l2 = str_idx_1[1] - str_idx_1[0], str_idx_2[1] - str_idx_2[0]
     print(str_idx_1,str_idx_2)
-    feat = slope(strs_1), slope(strs_2), meanshift(strs_1, strs_2)
-    plot_frame(pitch, where='212',show=True)
+    feat = slope(strs_1), slope(strs_2), meanshift(strs_1, strs_2), l2 / l1, str_idx_2[0] - str_idx_1[1]
+    #plot_frame(pitch, where='212',show=True)
     return feat
 
 def slope(seq):
@@ -70,21 +72,23 @@ def sub_endpoint_detect(frames):
         if s > max_score:
             max_score = s
             p = i
-    plot_frame(amp, where='211',sep=[p])
+    #plot_frame(amp, where='211',sep=[p])
+    if p == 0:
+        return len(amp) // 2
     return p
 
-def pitch_detect(sig, rate, winlen=0.04, step=0.005):
+def pitch_detect(sig, rate, winlen=0.0512, step=0.01, gender='male'):
     sig = downsampling(sig, rate, 10000)
     frames = to_frames(sig, 10000, winlen, step)
     g = []
     g_idx = []
     for frame in frames:
-        scores, scores_idx = pitch_detect_frame(frame, 10000)
+        scores, scores_idx = pitch_detect_frame(frame, 10000, gender)
         g.append(scores)
         g_idx.append(scores_idx)
     # for l in g:
     #    print(l)
-    pitch = max_pitch(g, g_idx)
+    pitch = robust_max_pitch(g, g_idx)
     return pitch, frames
 
 
@@ -93,29 +97,52 @@ def max_pitch(g, g_idx):
     for l, d in zip(g, g_idx):
         if l:
             idx = d[np.argmax(l)]
-            p = 1 / (0.04 / 512 * idx)
+            p = 1 / (0.0001 * idx)
             pitch.append(p)
         else:
             pitch.append(0)
     return pitch
 
 
-def pitch_detect_frame(frame, rate):
+def robust_max_pitch(g, g_idx):
+    """
+    more robust to half-frequency error
+    :param g: 
+    :param g_idx: 
+    :return: 
+    """
+    C = 50
+    pitch = max_pitch(g, g_idx)
+    for i in range(1,len(pitch)):
+        if abs(2 * pitch[i] - pitch[i-1]) < C and pitch[i] < 170:
+            pitch[i] = 2 * pitch[i]
+    for i in range(len(pitch)-2, 0, -1):
+        if abs(2 * pitch[i] - pitch[i+1]) < C and pitch[i] < 170:
+            pitch[i] = 2 * pitch[i]
+    return pitch
+
+def pitch_detect_frame(frame, rate, gender):
     # add hamming window
-    frame = window(frame, rate, 500, 512, 'hamming')
+    frame = window(frame, rate, 1000, 'hamming')
     Xw = np.fft.fft(frame, len(frame))
     log_Xw = np.log(np.abs(Xw))
-    log_sig = np.fft.ifft(log_Xw, len(frame))
-    scores, scores_idx = peak_score(np.abs(log_sig[:len(log_sig) // 2]))
+    #log_Xw = np.concatenate([log_Xw,np.zeros(1000)])
+    log_sig = np.fft.ifft(log_Xw, len(log_Xw))
+    scores, scores_idx = peak_score(np.abs(log_sig[:len(log_sig) // 2]), gender)
+    #plot_frame(np.abs(frame), where='211')
+    #plot_frame(np.abs(log_sig), where='212',show=True)
     return scores, scores_idx
 
 
-def peak_score(sig):
+def peak_score(sig, gender='male'):
     l = []
     idx = []
-    for i in range(20, 100):
+
+    #min_f, max_f = (20, 66) if gender == 'female' else (30,100)  # 150-500Hz, 50-330Hz
+    min_f, max_f = 20, 100
+    for i in range(min_f, max_f):
         flg = True
-        for item in list(sig[i - 5:i + 6]):
+        for item in list(sig[i - 3:i + 4]):
             if sig[i] < item:
                 flg = False
         if not flg:
@@ -161,10 +188,7 @@ def find_smooth_subsequence(pitch, base_tor=2, base_thres=50, bias=0):
 
     strs, str_idx = [], []
     tor, thres = base_tor, base_thres
-    while len(strs) < 2:
-        strs, str_idx = main_func(tor, thres)
-        thres -= 10
-        tor += 1
+    strs, str_idx = main_func(tor, thres)
     obj = sorted(zip(strs, str_idx), key=lambda x: -len(x[0]))
     strs, str_idx = tuple(zip(*obj))
 
@@ -188,12 +212,14 @@ if __name__ == '__main__':
         reg = re.compile('(\d+)-(\d+)-(\d+).wav')
         audio = reg.match(filename).group(2)
         person = reg.match(filename).group(1)
+        #if not (person[3:7] == '0713' and int(person[7:]) < 300):
+        #    continue
         if audio not in ['00', '01']:
             continue
         print(person, label, filename)
         cnt += 1
         l, r = basic_endpoint_detection(sig, rate)
-        #sig = preemphasis(sig)
+        sig = preemphasis(sig, coeff=1.0)
         frames = to_frames(sig[l:r], rate)
         feature = pitch_feature(sig[l:r], rate)
         p.append((feature[0],feature[2]))
@@ -202,7 +228,7 @@ if __name__ == '__main__':
         if cnt == 100: break
     scatter(p,labels,'111',True)
 
-    '''
+
     cnt = 0
     for idx, l, (sig, rate), label, filename in val_itr:
         reg = re.compile('(\d+)-(\d+)-(\d+).wav')
@@ -238,4 +264,4 @@ if __name__ == '__main__':
     pred = clf.predict(X_test)
     acc = accuracy_score(labels_test, pred)
     print(acc)
-    '''
+

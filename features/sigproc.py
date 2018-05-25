@@ -19,7 +19,7 @@ def to_frames(sig, rate, t=0.020, step=0.010):
     return framesig(sig, int(rate * t), int(step * rate))
 
 
-def window(sig, rate, thres, nfft, wintype='square'):
+def window(sig, rate, thres, wintype='square'):
     """
     add a window to the signal.
     low-pass filter
