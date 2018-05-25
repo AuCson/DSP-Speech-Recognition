@@ -29,6 +29,16 @@ def plot_mfcc(mfcc, where, show=False):
     if show:
         plt.show()
 
+def scatter(points, label, where, show=False):
+    plt.subplot(where)
+    if len(points) == 2:
+        plt.scatter(points[0],points[1],c=label)
+    else:
+        x = [_[0] for _ in points]
+        y = [_[1] for _ in points]
+        plt.scatter(x,y,c=label)
+    if show:
+        plt.show()
 
 def show(save=False, f=None):
     if not save:
