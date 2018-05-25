@@ -37,7 +37,8 @@ class Reader:
             obj = reg.match(file)
             if obj is not None:
                 inst.add(obj.group(3))
-                person.add(obj.group(1))
+                if person not in ['15307130079']:
+                    person.add(obj.group(1))
             else:
                 print(file)
         person = sorted(list(person))
@@ -91,6 +92,7 @@ class Reader:
         for s,file in enumerate(files):
             #if verbose:
             #    print(file)
+
             feat, labels = self.read_data([file])
             if not feat:
                 continue
