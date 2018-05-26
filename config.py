@@ -30,7 +30,7 @@ class Config:
         self.val_person = 0.1
         self.frame = 0.02
         self.step = 0.01
-        self.model_path = 'models/rnn.pkl'
+        self.model_path = 'models/transformer.pkl'
         self.init_logging_handler()
         self.cuda_device = 0
 

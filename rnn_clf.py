@@ -119,7 +119,7 @@ class HRNN(nn.Module):
         self.hir = 10
         self.enc1 = DynamicEncoder(39, 50, n_layers=1, dropout=0.0, bidir=True)
         self.enc2 = DynamicEncoder(50, 50, n_layers=1, dropout=0.0, bidir=True)
-        self.out = nn.Linear(100, 20)
+        self.out = nn.Linear(200, 20)
 
     def forward(self, mfcc0, mfcc1, mfcc2, len0):
         len1 = [(_+self.hir-1) // self.hir for _ in len0]
@@ -134,7 +134,10 @@ class HRNN(nn.Module):
         feat = torch.stack(feat) # [T2,B,H]
         enc_out2, hidden2 = self.enc2(feat, len1)
 
-        out = self.out(torch.cat([hidden2[0], hidden2[1]], dim=1))
+        sum_enc_out = enc_out2.sum(0)
+        avg_pool = sum_enc_out / len1_v.unsqueeze(1)
+        max_pool, _ = torch.max(enc_out2, 0)
+        out = self.out(torch.cat([avg_pool, max_pool, hidden2[0], hidden2[1]], dim=1))
         return out
 
 class Transformer(nn.Module):
@@ -145,7 +148,7 @@ class Transformer(nn.Module):
         self.rnn_enc_2 = DynamicEncoder(50, 50, n_layers=1, dropout=0.0, bidir=True)
 
         self.hir = 10
-        self.out = nn.Linear(100,20)
+        self.out = nn.Linear(200,20)
 
     def forward(self, mfcc0, mfcc1, mfcc2, len0):
         len1 = [(_ + self.hir - 1) // self.hir for _ in len0]
@@ -169,5 +172,39 @@ class Transformer(nn.Module):
         sum_enc_out = enc_out2.sum(0)
         avg_pool = sum_enc_out / len1_v.unsqueeze(1)
         max_pool,_ = torch.max(enc_out2,0)
+        out = self.out(torch.cat([avg_pool, max_pool, hidden2[0], hidden2[1]], dim=1))
+        return out
+
+class Transformer_CNN(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.attn_enc = TransformerEncoder(39, 50, n_head=2)
+        self.rnn_enc_1 = DynamicEncoder(78, 50, n_layers=1, dropout=0.0, bidir=True)
+        #self.rnn_enc_2 = DynamicEncoder(50, 50, n_layers=1, dropout=0.0, bidir=True)
+        self.conv = nn.Conv2d(1,2,(21,1),stride=(3,1)) # only pools on time
+        self.maxpool = nn.MaxPool2d((21,1),stride=(10,1))
+        self.avgpool = nn.AvgPool2d((21,1),stride=(10,1))
+        self.out = nn.Linear(800,20)
+
+    def forward(self, mfcc0, mfcc1, mfcc2, len0):
+        #len1 = [(_ + self.hir - 1) // self.hir for _ in len0]
+        #len1 = np.array(len1)
+        len0_v = cuda_(Variable(torch.from_numpy(len0).float()))
+        #len1_v = cuda_(Variable(torch.from_numpy(len1).float()))
+        inp = torch.cat([mfcc0, mfcc1, mfcc2],dim=2)
+        attn_out = self.attn_enc(inp)
+        rnn_inp = torch.cat([inp, attn_out], dim=2)
+        enc_out, hidden = self.rnn_enc_1(rnn_inp, len0)
+        enc_out = F.dropout(enc_out) # [T,B,H]
+
+        conv_input = enc_out.transpose(0,1).unsqueeze(1) # [B,1,T,H]
+        conv = self.conv(conv_input) # [B,F,T_s,H]
+        max_pool = self.maxpool(conv)
+        max_pool = max_pool.contiguous() # [B,F,T_s,H]
+        max_pool = max_pool.view(max_pool.size(0),-1)
+        avg_pool = self.avgpool(conv)
+        avg_pool = avg_pool.contiguous() # [B,F,T_s,H]
+        avg_pool = avg_pool.view(max_pool.size(0),-1)
+
         out = self.out(torch.cat([avg_pool, max_pool], dim=1))
         return out

@@ -6,7 +6,7 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import robust_scale
 from sklearn.metrics import accuracy_score, confusion_matrix
 import pickle
-from rnn_clf import RNN, HRNN, cuda_, Transformer, CNNRNN
+from rnn_clf import RNN, HRNN, cuda_, Transformer, CNNRNN, Transformer_CNN
 import torch
 from torch.autograd import Variable
 from features.endpoint import basic_endpoint_detection
@@ -17,7 +17,7 @@ import random
 
 class _ModelBase:
     def __init__(self):
-        self.reader = Reader(debug=False)
+        self.reader = Reader()
 
     def deviation(self, arr, smooth=1):
         l = []
@@ -25,14 +25,23 @@ class _ModelBase:
             l.append(arr[i+smooth]-arr[i])
         return np.array(l)
 
+    def pad(self, b, shape):
+        if len(b) < 200:
+            return np.pad(b,((0, 200 - len(b)),(0,0)),'constant',constant_values=0)
+        else:
+            return np.array(b[:200])
+
+    def pad2(self, b, shape):
+        return np.pad(b,shape,'constant',constant_values=0)
+
     def pad_batch(self, mfcc0, mfcc1, mfcc2):
         max_len = max([len(_) for _ in mfcc0])
-        #max_len = 420
+        #max_len = 200
         l0,l1,l2 = [],[],[]
         for b0, b1, b2 in zip(mfcc0, mfcc1, mfcc2):
-            l0.append(np.pad(b0, ((0, max_len - len(b0)),(0,0)), 'constant', constant_values=0))
-            l1.append(np.pad(b1, ((0, max_len - len(b1)), (0, 0)), 'constant', constant_values=0))
-            l2.append(np.pad(b2, ((0, max_len - len(b2)), (0, 0)), 'constant', constant_values=0))
+            l0.append(self.pad2(b0, ((0, max_len - len(b0)),(0,0))))
+            l1.append(self.pad2(b1, ((0, max_len - len(b1)), (0, 0))))
+            l2.append(self.pad2(b2, ((0, max_len - len(b2)), (0, 0))))
         return np.array(l0), np.array(l1), np.array(l2)
 
 
@@ -67,6 +76,7 @@ class RNNModel(_ModelBase):
     def __init__(self):
         super().__init__()
         self.clf = Transformer()
+        #self.clf = HRNN()
         self.clf = cuda_(self.clf)
 
     def train(self):
@@ -91,31 +101,35 @@ class RNNModel(_ModelBase):
             optim.step()
             printer.info('%d/%d loss:%f' % (itr,total_iter,loss.data[0]))
             #break
-        #self.eval()
+        #self.test()
 
+    def test_iter(self, itr, total_iter, feat, label, files):
+        features = [self.feature_extract(a, b, filename) for (a, b), filename in zip(feat, files)]
+        features = [_ for _ in zip(*features)]
+        features[0], features[1], features[2] = self.pad_batch(features[0], features[1], features[2])
+        features[3], features[4], features[5] = np.array(features[3]), np.array(features[4]), np.array(features[5])
+        mfcc0, mfcc1, mfcc2 = cuda_(Variable(torch.from_numpy(features[0]).float())), \
+                              cuda_(Variable(torch.from_numpy(features[1]).float())), \
+                              cuda_(Variable(torch.from_numpy(features[2]).float()))
+        mfcc0, mfcc1, mfcc2 = mfcc0.transpose(0, 1), mfcc1.transpose(0, 1), mfcc2.transpose(0, 1)
+        out = self.clf(mfcc0, mfcc1, mfcc2, features[3])
+        _, pred_ = torch.max(out, 1)
+        pred_ = pred_.data.cpu().numpy().tolist()
+        return pred_
 
-    def eval(self):
+    def test(self):
         dev_data = self.reader.mini_batch_iterator(self.reader.val_person)
         y,pred = [],[]
-        self.clf.eval()
+        self.clf.test()
         for itr, total_iter, feat, label, files in dev_data:
-            features = [self.feature_extract(a, b, filename) for (a, b), filename in zip(feat, files)]
-            features = [_ for _ in zip(*features)]
-            features[0], features[1], features[2] = self.pad_batch(features[0], features[1], features[2])
-            features[3], features[4], features[5] = np.array(features[3]), np.array(features[4]), np.array(features[5])
-            mfcc0, mfcc1, mfcc2 = cuda_(Variable(torch.from_numpy(features[0]).float())), \
-                                  cuda_(Variable(torch.from_numpy(features[1]).float())),\
-                                 cuda_(Variable(torch.from_numpy(features[2]).float()))
-            mfcc0, mfcc1, mfcc2 = mfcc0.transpose(0, 1), mfcc1.transpose(0, 1), mfcc2.transpose(0, 1)
-            out = self.clf(mfcc0, mfcc1, mfcc2, features[3])
-            _,pred_ = torch.max(out,1)
-            pred_ = pred_.data.cpu().numpy().tolist()
+            pred_ = self.test_iter(itr, total_iter, feat, label, files)
             y.extend(label)
             pred.extend(pred_)
             printer.info('%d/%d loss' % (itr, total_iter))
             #for i,_ in enumerate(pred_):
             #    if pred_[i] != label[i]:
             #       logger.info(files[i])
+            #if itr > 1000: break
         acc = accuracy_score(y,pred)
         printer.info(acc)
         #cm = confusion_matrix(y, pred)
@@ -123,6 +137,9 @@ class RNNModel(_ModelBase):
         self.clf.train()
         return acc
 
+    def load(self):
+        state_dict = torch.load(cfg.model_path)
+        self.clf.load_state_dict(state_dict)
 
 if __name__ == '__main__':
     random.seed(0)
@@ -145,19 +162,19 @@ if __name__ == '__main__':
             else:
                 v = dtype(v)
             setattr(cfg, k, v)
-
-    torch.cuda.set_device(cfg.cuda_device)
+    if cfg.cuda:
+        torch.cuda.set_device(cfg.cuda_device)
 
     m = RNNModel()
     if args.mode == 'test':
         state_dict = torch.load(cfg.model_path)
         m.clf.load_state_dict(state_dict)
-        m.eval()
+        m.test()
     elif args.mode == 'train':
         prev_acc = 0
         for i in range(10):
             m.train()
-            acc = m.eval()
+            acc = m.test()
             if acc > prev_acc:
                 f = open(cfg.model_path, 'wb')
                 torch.save(m.clf.state_dict(), f)
@@ -172,4 +189,4 @@ if __name__ == '__main__':
         for i in range(10):
             m.train()
         #break
-    #m.eval()
+    #m.test()

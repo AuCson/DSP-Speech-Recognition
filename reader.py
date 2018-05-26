@@ -97,4 +97,3 @@ class Reader:
             if not feat:
                 continue
             yield s, 1, feat[0],labels[0], file
-
