@@ -13,6 +13,7 @@ from features.endpoint import basic_endpoint_detection
 import plotter
 import re
 import argparse
+import random
 
 class _ModelBase:
     def __init__(self):
@@ -26,9 +27,10 @@ class _ModelBase:
 
     def pad_batch(self, mfcc0, mfcc1, mfcc2):
         max_len = max([len(_) for _ in mfcc0])
+        #max_len = 420
         l0,l1,l2 = [],[],[]
         for b0, b1, b2 in zip(mfcc0, mfcc1, mfcc2):
-            l0.append(np.pad(b0, ((0, max_len-len(b0)),(0,0)), 'constant', constant_values=0))
+            l0.append(np.pad(b0, ((0, max_len - len(b0)),(0,0)), 'constant', constant_values=0))
             l1.append(np.pad(b1, ((0, max_len - len(b1)), (0, 0)), 'constant', constant_values=0))
             l2.append(np.pad(b2, ((0, max_len - len(b2)), (0, 0)), 'constant', constant_values=0))
         return np.array(l0), np.array(l1), np.array(l2)
@@ -123,6 +125,10 @@ class RNNModel(_ModelBase):
 
 
 if __name__ == '__main__':
+    random.seed(0)
+    np.random.seed(0)
+    torch.manual_seed(0)
+    torch.cuda.manual_seed(0)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('mode')
@@ -139,6 +145,9 @@ if __name__ == '__main__':
             else:
                 v = dtype(v)
             setattr(cfg, k, v)
+
+    torch.cuda.set_device(cfg.cuda_device)
+
     m = RNNModel()
     if args.mode == 'test':
         state_dict = torch.load(cfg.model_path)

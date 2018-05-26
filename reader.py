@@ -37,8 +37,7 @@ class Reader:
             obj = reg.match(file)
             if obj is not None:
                 inst.add(obj.group(3))
-                if person not in ['15307130079']:
-                    person.add(obj.group(1))
+                person.add(obj.group(1))
             else:
                 print(file)
         person = sorted(list(person))
@@ -59,6 +58,7 @@ class Reader:
                 else:
                     train_files.append(file)
         print(len(train_files), len(val_person_files), len(val_inst_files))
+        print('random: %f', random.random())
         return train_files, val_person_files, val_inst_files
 
     def read_data(self, files):

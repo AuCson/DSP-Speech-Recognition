@@ -131,7 +131,6 @@ class HRNN(nn.Module):
         feat = []
         for t in range(0, enc_out.size(0), self.hir):
             feat.append(enc_out[t])
-
         feat = torch.stack(feat) # [T2,B,H]
         enc_out2, hidden2 = self.enc2(feat, len1)
 
@@ -144,6 +143,7 @@ class Transformer(nn.Module):
         self.attn_enc = TransformerEncoder(39, 50, n_head=2)
         self.rnn_enc_1 = DynamicEncoder(78, 50, n_layers=1, dropout=0.0, bidir=True)
         self.rnn_enc_2 = DynamicEncoder(50, 50, n_layers=1, dropout=0.0, bidir=True)
+
         self.hir = 10
         self.out = nn.Linear(100,20)
 
@@ -156,10 +156,18 @@ class Transformer(nn.Module):
         attn_out = self.attn_enc(inp)
         rnn_inp = torch.cat([inp, attn_out], dim=2)
         enc_out, hidden = self.rnn_enc_1(rnn_inp, len0)
+        enc_out = F.dropout(enc_out)
+
         feat = []
         for t in range(0, enc_out.size(0), self.hir):
             feat.append(enc_out[t])
         feat = torch.stack(feat)
+
         enc_out2, hidden2 = self.rnn_enc_2(feat, len1)
-        out = self.out(torch.cat([hidden2[0], hidden2[1]], dim=1))
+        enc_out2 = F.dropout(enc_out2)
+
+        sum_enc_out = enc_out2.sum(0)
+        avg_pool = sum_enc_out / len1_v.unsqueeze(1)
+        max_pool,_ = torch.max(enc_out2,0)
+        out = self.out(torch.cat([avg_pool, max_pool], dim=1))
         return out

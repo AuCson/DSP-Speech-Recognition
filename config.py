@@ -26,13 +26,13 @@ class Config:
         self.cuda = False
         self.batch_size = 32
         self.data_dir = './data/'
-        self.val_instance = 0.2
+        self.val_instance = 0.1
         self.val_person = 0.1
         self.frame = 0.02
         self.step = 0.01
         self.model_path = 'models/rnn.pkl'
         self.init_logging_handler()
-
+        self.cuda_device = 0
 
     def init_logging_handler(self):
         current_time = time.strftime("%m-%d-%H-%M-%S", time.localtime())
