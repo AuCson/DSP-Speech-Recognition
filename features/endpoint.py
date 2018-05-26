@@ -5,11 +5,11 @@ Date: 2018.05.20
 Purpose: Endpoint detection algorithms
 
 """
-from sigproc import *
+from features.sigproc import *
 from plotter import plot_frame, show
 import numpy as np
 from reader import Reader
-from preprocess import preemphasis
+from features.preprocess import preemphasis
 from config import cfg, meta
 
 def basic_endpoint_detection(sig, rate):

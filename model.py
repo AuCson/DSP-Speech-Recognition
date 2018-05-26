@@ -6,7 +6,7 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import robust_scale
 from sklearn.metrics import accuracy_score, confusion_matrix
 import pickle
-from rnn_clf import RNN, cuda_
+from rnn_clf import RNN, HRNN, cuda_, Transformer
 import torch
 from torch.autograd import Variable
 from features.endpoint import basic_endpoint_detection
@@ -41,8 +41,10 @@ class _ModelBase:
         left, right = basic_endpoint_detection(sig, rate)
         sound = sig[left:right].reshape(-1,1)
         #plotter.plot_frame(sound, show=True)
-        mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=1024)
+        mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=1024, winfunc=np.hamming)
         mfcc0 = delta(mfcc0,3)
+        # mean normalize
+        mfcc0 = mfcc0 - np.mean(mfcc0)
         mfcc1 = self.deviation(mfcc0,5)
         mfcc2 = self.deviation(mfcc1,5)
         '''
@@ -59,7 +61,8 @@ class _ModelBase:
 class RNNModel(_ModelBase):
     def __init__(self):
         super().__init__()
-        self.clf = RNN()
+        self.clf = Transformer()
+        self.clf = cuda_(self.clf)
 
     def train(self):
         #train_data = self.reader.mini_batch_iterator(self.reader.train)
@@ -97,7 +100,7 @@ class RNNModel(_ModelBase):
             mfcc0, mfcc1, mfcc2 = mfcc0.transpose(0, 1), mfcc1.transpose(0, 1), mfcc2.transpose(0, 1)
             out = self.clf(mfcc0, mfcc1, mfcc2, features[3])
             _,pred_ = torch.max(out,1)
-            pred_ = pred_.data.numpy().tolist()
+            pred_ = pred_.data.cpu().numpy().tolist()
             y.extend(label)
             pred.extend(pred_)
             print('%d/%d loss' % (itr, total_iter))
@@ -113,7 +116,7 @@ class RNNModel(_ModelBase):
 
 
 if __name__ == '__main__':
-    m = RNNModel()
+
     parser = argparse.ArgumentParser()
     parser.add_argument('mode')
     parser.add_argument('-cfg',nargs='*')
@@ -129,7 +132,7 @@ if __name__ == '__main__':
             else:
                 v = dtype(v)
             setattr(cfg, k, v)
-
+    m = RNNModel()
     if args.mode == 'test':
         state_dict = torch.load(cfg.model_path)
         m.clf.load_state_dict(state_dict)
@@ -140,7 +143,7 @@ if __name__ == '__main__':
             m.train()
             acc = m.eval()
             if acc > prev_acc:
-                f = open('models/rnn.pkl', 'wb')
+                f = open(cfg.model_path, 'wb')
                 torch.save(m.clf.state_dict(), f)
                 f.close()
                 prev_acc = acc

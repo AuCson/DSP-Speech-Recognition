@@ -6,11 +6,11 @@ Date: 2018.05.24
 Pitch detection using cesptrum
 """
 import numpy as np
-from preprocess import preemphasis
-from sigproc import to_frames, window
+from features.preprocess import preemphasis
+from features.sigproc import to_frames, window
 from reader import Reader
 from plotter import plot_frame, show, scatter
-from endpoint import basic_endpoint_detection
+from features.endpoint import basic_endpoint_detection
 import re
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.svm import SVC

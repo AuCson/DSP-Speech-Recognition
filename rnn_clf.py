@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
 from config import cfg
+from transformer import TransformerEncoder
 
 def cuda_(var):
     return var.cuda() if cfg.cuda else var
@@ -42,6 +43,7 @@ class DynamicEncoder(nn.Module):
         input_lens = input_lens[sort_idx]
         sort_idx = cuda_(torch.LongTensor(sort_idx))
         input_seqs = input_seqs[sort_idx].transpose(0, 1)  # [T,B,E]
+        #input_lens = cuda_(torch.from_numpy(input_lens).long())
         packed = torch.nn.utils.rnn.pack_padded_sequence(input_seqs, input_lens)
         outputs, hidden = self.gru(packed, hidden)
         outputs, _ = torch.nn.utils.rnn.pad_packed_sequence(outputs)
@@ -58,8 +60,8 @@ class RNN(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        self.enc = DynamicEncoder(39,100,1,0.0)
-        self.out = nn.Linear(200,20)
+        self.enc = DynamicEncoder(39,50,1,0.0)
+        self.out = nn.Linear(100,20)
 
     def forward(self, mfcc0, mfcc1, mfcc2, len0):
         """
@@ -69,7 +71,7 @@ class RNN(nn.Module):
         """
         #len0_v = Variable(torch.FloatTensor(len0))
         enc_out, hidden = self.enc(torch.cat([mfcc0, mfcc1, mfcc2], dim=2), len0) # [T,B,H]
-        #sum_enc_out = enc_out.sum(0)
+        sum_enc_out = enc_out.sum(0)
         #avg_pool = sum_enc_out / len0_v.unsqueeze(1)
         #max_pool,_ = torch.max(enc_out,0)
         out = self.out(torch.cat([hidden[0],hidden[1]], dim=1))
@@ -84,14 +86,15 @@ class HRNN(nn.Module):
     def __init__(self):
         super().__init__()
         self.hir = 10
-        self.enc1 = DynamicEncoder(39, 50, n_layers=1, dropout=0.5, bidir=True)
-        self.enc2 = DynamicEncoder(50, 50, n_layers=1, dropout=0.5, bidir=True)
-        self.out = nn.Linear(150, 20)
+        self.enc1 = DynamicEncoder(39, 50, n_layers=1, dropout=0.0, bidir=True)
+        self.enc2 = DynamicEncoder(50, 50, n_layers=1, dropout=0.0, bidir=True)
+        self.out = nn.Linear(100, 20)
 
     def forward(self, mfcc0, mfcc1, mfcc2, len0):
         len1 = [(_+self.hir-1) // self.hir for _ in len0]
-        len0_v = Variable(torch.FloatTensor(len0))
-        len1_v = Variable(torch.FloatTensor(len1))
+        len1 = np.array(len1)
+        len0_v = cuda_(Variable(torch.from_numpy(len0).float()))
+        len1_v = cuda_(Variable(torch.from_numpy(len1).float()))
         enc_out, hidden = self.enc1(torch.cat([mfcc0, mfcc1, mfcc2], dim=2), len0)
 
         feat = []
@@ -104,3 +107,19 @@ class HRNN(nn.Module):
         out = self.out(torch.cat([hidden2[0], hidden2[1]], dim=1))
         return out
 
+class Transformer(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.attn_enc = TransformerEncoder(39, 50, n_head=3)
+        self.rnn_enc = DynamicEncoder(39, 50, n_layers=1, dropout=0.0, bidir=True)
+        self.out = nn.Linear(100,20)
+
+    def forward(self, mfcc0, mfcc1, mfcc2, len0):
+        len0_v = cuda_(Variable(torch.from_numpy(len0).float()))
+        attn_out = self.attn_enc(torch.cat([mfcc0, mfcc1, mfcc2], dim=2))
+        enc_out, hidden = self.rnn_enc(attn_out, len0)
+        #sum_enc_out = enc_out.sum(0)
+        #avg_pool = sum_enc_out / len0_v.unsqueeze(1)
+        #max_pool,_ = torch.max(enc_out,0)
+        out = self.out(torch.cat([hidden[0], hidden[1]], dim=1))
+        return out

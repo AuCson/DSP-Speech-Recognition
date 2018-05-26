@@ -14,44 +14,16 @@ __author__ = "Yu-Hsiang Huang"
 class TransformerEncoder(nn.Module):
     ''' Compose with two layers '''
 
-    def __init__(self, d_model, d_inner_hid, n_head, d_k, d_v, dropout=0.1):
+    def __init__(self, d_model, d_inner_hid, n_head, d_k=64, d_v=64, dropout=0.1):
         super().__init__()
         self.slf_attn = MultiHeadAttention(n_head, d_model, d_k, d_v, dropout=dropout)
         self.pos_ffn = PositionwiseFeedForward(d_model, d_inner_hid, dropout=dropout)
 
     def forward(self, enc_input, slf_attn_mask=None):
-        enc_output, enc_slf_attn = self.slf_attn(
+        enc_output = self.slf_attn(
             enc_input, enc_input, enc_input, attn_mask=slf_attn_mask)
         enc_output = self.pos_ffn(enc_output)
-        return enc_output, enc_slf_attn
-
-class Linear(nn.Module):
-    ''' Simple Linear layer with xavier init '''
-    def __init__(self, d_in, d_out, bias=True):
-        super(Linear, self).__init__()
-        self.linear = nn.Linear(d_in, d_out, bias=bias)
-        init.xavier_normal(self.linear.weight)
-
-    def forward(self, x):
-        return self.linear(x)
-
-class Bottle(nn.Module):
-    ''' Perform the reshape routine before and after an operation '''
-
-    def forward(self, input):
-        if len(input.size()) <= 2:
-            return super(Bottle, self).forward(input)
-        size = input.size()[:2]
-        out = super(Bottle, self).forward(input.view(size[0]*size[1], -1))
-        return out.view(size[0], size[1], -1)
-
-class BottleLinear(Bottle, Linear):
-    ''' Perform the reshape routine before and after a linear projection '''
-    pass
-
-class BottleSoftmax(Bottle, nn.Softmax):
-    ''' Perform the reshape routine before and after a softmax operation'''
-    pass
+        return enc_output
 
 class LayerNormalization(nn.Module):
     ''' Layer normalization module '''
@@ -74,24 +46,16 @@ class LayerNormalization(nn.Module):
 
         return ln_out
 
-class BatchBottle(nn.Module):
-    ''' Perform the reshape routine before and after an operation '''
-
-    def forward(self, input):
-        if len(input.size()) <= 2:
-            return super(BatchBottle, self).forward(input)
-        size = input.size()[1:]
-        out = super(BatchBottle, self).forward(input.view(-1, size[0]*size[1]))
-        return out.view(-1, size[0], size[1])
-
 class ScaledDotProductAttention(nn.Module):
-    ''' Scaled Dot-Product Attention '''
+    """
+    Scaled Dot Product Attention
+    """
 
     def __init__(self, d_model, attn_dropout=0.1):
         super(ScaledDotProductAttention, self).__init__()
         self.temper = np.power(d_model, 0.5)
         self.dropout = nn.Dropout(attn_dropout)
-        self.softmax = BottleSoftmax()
+        self.softmax = nn.Softmax()
 
     def forward(self, q, k, v, attn_mask=None):
 
@@ -129,7 +93,7 @@ class MultiHeadAttention(nn.Module):
 
         self.attention = ScaledDotProductAttention(d_model)
         self.layer_norm = LayerNormalization(d_model)
-        self.proj = Linear(n_head*d_v, d_model)
+        self.proj = nn.Linear(n_head*d_v, d_model)
 
         self.dropout = nn.Dropout(dropout)
 
@@ -138,28 +102,32 @@ class MultiHeadAttention(nn.Module):
         init.xavier_normal(self.w_vs)
 
     def forward(self, q, k, v, attn_mask=None):
-
-        d_k, d_v = self.d_k, self.d_v
-        n_head = self.n_head
-
+        """
+        
+        :param q: [T,B,H] 
+        :param k: [T,B,H]
+        :param v: [T,B,H]
+        :param attn_mask: 
+        :return: 
+        """
+        q, k, v = q.transpose(0,1), k.transpose(0,1), v.transpose(0,1)
         residual = q
-
         mb_size, len_q, d_model = q.size()
         mb_size, len_k, d_model = k.size()
         mb_size, len_v, d_model = v.size()
 
         # treat as a (n_head) size batch
-        q_s = q.repeat(n_head, 1, 1).view(n_head, -1, d_model) # n_head x (mb_size*len_q) x d_model
-        k_s = k.repeat(n_head, 1, 1).view(n_head, -1, d_model) # n_head x (mb_size*len_k) x d_model
-        v_s = v.repeat(n_head, 1, 1).view(n_head, -1, d_model) # n_head x (mb_size*len_v) x d_model
+        q_s = q.repeat(self.n_head, 1, 1).view(self.n_head, -1, d_model) # n_head x (mb_size*len_q) x d_model
+        k_s = k.repeat(self.n_head, 1, 1).view(self.n_head, -1, d_model) # n_head x (mb_size*len_k) x d_model
+        v_s = v.repeat(self.n_head, 1, 1).view(self.n_head, -1, d_model) # n_head x (mb_size*len_v) x d_model
 
         # treat the result as a (n_head * mb_size) size batch
-        q_s = torch.bmm(q_s, self.w_qs).view(-1, len_q, d_k)   # (n_head*mb_size) x len_q x d_k
-        k_s = torch.bmm(k_s, self.w_ks).view(-1, len_k, d_k)   # (n_head*mb_size) x len_k x d_k
-        v_s = torch.bmm(v_s, self.w_vs).view(-1, len_v, d_v)   # (n_head*mb_size) x len_v x d_v
+        q_s = torch.bmm(q_s, self.w_qs).view(-1, len_q, self.d_k)   # (n_head*mb_size) x len_q x d_k
+        k_s = torch.bmm(k_s, self.w_ks).view(-1, len_k, self.d_k)   # (n_head*mb_size) x len_k x d_k
+        v_s = torch.bmm(v_s, self.w_vs).view(-1, len_v, self.d_v)   # (n_head*mb_size) x len_v x d_v
 
         # perform attention, result size = (n_head * mb_size) x len_q x d_v
-        outputs, attns = self.attention(q_s, k_s, v_s, attn_mask=attn_mask.repeat(n_head, 1, 1))
+        outputs, attns = self.attention(q_s, k_s, v_s, attn_mask=attn_mask.repeat(self.n_head, 1, 1) if attn_mask is not None else None)
 
         # back to original mb_size batch, result size = mb_size x len_q x (n_head*d_v)
         outputs = torch.cat(torch.split(outputs, mb_size, dim=0), dim=-1)
@@ -167,8 +135,8 @@ class MultiHeadAttention(nn.Module):
         # project back to residual size
         outputs = self.proj(outputs)
         outputs = self.dropout(outputs)
-
-        return self.layer_norm(outputs + residual), attns
+        norm_outputs = self.layer_norm(outputs + residual).transpose(0,1)
+        return norm_outputs
 
 class PositionwiseFeedForward(nn.Module):
     ''' A two-feed-forward-layer module '''
