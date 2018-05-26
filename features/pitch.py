@@ -12,7 +12,7 @@ from reader import Reader
 from plotter import plot_frame, show, scatter
 from endpoint import basic_endpoint_detection
 import re
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.svm import SVC
 from sklearn.preprocessing import RobustScaler
 from itertools import chain
@@ -31,12 +31,14 @@ def pitch_feature(sig, rate, gender='male'):
     pitch, frames = pitch_detect(sig, rate, gender=gender)
     # xi, yi, meanshift, slope_a, slope_b = find_smooth_subsequence(pitch)
     p = sub_endpoint_detect(frames)
-
-    strs_1, str_idx_1 = find_smooth_subsequence(pitch[:p],base_tor=4)
+    p_bias = 5 if p > 15 else 0
+    strs_1, str_idx_1 = find_smooth_subsequence(pitch[p_bias:p],base_tor=4,bias=p_bias)
+    p_bias = 5 if len(pitch) - p > 15 else 0
     strs_2, str_idx_2 = find_smooth_subsequence(pitch[p:],base_tor=4, bias=p)
     l1,l2 = str_idx_1[1] - str_idx_1[0], str_idx_2[1] - str_idx_2[0]
     print(str_idx_1,str_idx_2)
-    feat = slope(strs_1), slope(strs_2), meanshift(strs_1, strs_2), l2 / l1, str_idx_2[0] - str_idx_1[1]
+    feat = slope(strs_1), slope(strs_2), meanshift(strs_1, strs_2), l2 / l1, (str_idx_2[0] - str_idx_1[1])/len(frames)
+    print(feat)
     #plot_frame(pitch, where='212',show=True)
     return feat
 
@@ -158,7 +160,7 @@ def peak_score(sig, gender='male'):
     return l, idx
 
 
-def find_smooth_subsequence(pitch, base_tor=2, base_thres=50, bias=0):
+def find_smooth_subsequence(pitch, base_tor=2, base_thres=30, bias=0):
     def main_func(tor=2, thres=50):
         i = 0
         strs = []
@@ -225,7 +227,7 @@ if __name__ == '__main__':
         p.append((feature[0],feature[2]))
         X.append(feature)
         labels.append(label)
-        if cnt == 100: break
+        if cnt == 1000: break
     scatter(p,labels,'111',True)
 
 
@@ -255,7 +257,8 @@ if __name__ == '__main__':
     X_test = scaler.transform(X_test)
 
     #clf = RandomForestClassifier()
-    clf = SVC()
+    #clf = SVC(kernel='rbf')
+    clf = GradientBoostingClassifier()
     clf.fit(X, labels)
 
     pickle.dump(clf, fc)

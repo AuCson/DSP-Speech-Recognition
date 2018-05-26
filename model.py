@@ -40,7 +40,7 @@ class _ModelBase:
         audio = reg.match(filename).group(2)
         left, right = basic_endpoint_detection(sig, rate)
         sound = sig[left:right].reshape(-1,1)
-        plotter.plot_frame(sound, show=True)
+        #plotter.plot_frame(sound, show=True)
         mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=1024)
         mfcc0 = delta(mfcc0,3)
         mfcc1 = self.deviation(mfcc0,5)
@@ -81,10 +81,8 @@ class RNNModel(_ModelBase):
             optim.step()
             print('%d/%d loss:%f' % (itr,total_iter,loss.data[0]))
             #break
-        self.eval()
-        f = open('models/toy.pkl', 'wb')
-        torch.save(self.clf.state_dict(), f)
-        f.close()
+        #self.eval()
+
 
     def eval(self):
         dev_data = self.reader.mini_batch_iterator(self.reader.val_person)
@@ -111,6 +109,7 @@ class RNNModel(_ModelBase):
         #cm = confusion_matrix(y, pred)
         #print(cm)
         self.clf.train()
+        return acc
 
 
 if __name__ == '__main__':
@@ -136,8 +135,18 @@ if __name__ == '__main__':
         m.clf.load_state_dict(state_dict)
         m.eval()
     elif args.mode == 'train':
+        prev_acc = 0
         for i in range(10):
             m.train()
+            acc = m.eval()
+            if acc > prev_acc:
+                f = open('models/rnn.pkl', 'wb')
+                torch.save(m.clf.state_dict(), f)
+                f.close()
+                prev_acc = acc
+            else:
+                break
+
     elif args.mode == 'adjust':
         state_dict = torch.load(cfg.model_path)
         m.clf.load_state_dict(state_dict)
