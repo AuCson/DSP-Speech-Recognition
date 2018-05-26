@@ -30,16 +30,16 @@ class Config:
         self.val_person = 0.1
         self.frame = 0.02
         self.step = 0.01
-        self.model_path='models/toy.pkl'
+        self.model_path = 'models/rnn.pkl'
+        self.init_logging_handler()
 
-        #self.init_logging_handler()
 
     def init_logging_handler(self):
         current_time = time.strftime("%m-%d-%H-%M-%S", time.localtime())
         if not os.path.isdir('./log/'):
             os.makedirs('./log/')
         stderr_handler = logging.StreamHandler()
-        file_handler = logging.FileHandler('./log/log_{}.txt'.format(current_time))
+        file_handler = logging.FileHandler('./log/{}.txt'.format(current_time))
         logger = logging.getLogger('verbose')
         logger.setLevel(logging.DEBUG)
         logger.addHandler(file_handler)
@@ -52,6 +52,7 @@ class Config:
 global_config = Config()
 global_meta = Meta()
 logger = logging.getLogger('mute')
+printer = logging.getLogger('verbose')
 
 cfg = global_config
 meta = global_meta

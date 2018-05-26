@@ -6,7 +6,7 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import robust_scale
 from sklearn.metrics import accuracy_score, confusion_matrix
 import pickle
-from rnn_clf import RNN, HRNN, cuda_, Transformer
+from rnn_clf import RNN, HRNN, cuda_, Transformer, CNNRNN
 import torch
 from torch.autograd import Variable
 from features.endpoint import basic_endpoint_detection
@@ -24,12 +24,15 @@ class _ModelBase:
             l.append(arr[i+smooth]-arr[i])
         return np.array(l)
 
-    def pad(self, feat):
-        if feat.shape[0] < 400:
-            feat = np.pad(feat, ((0, 400 - feat.shape[0]), (0, 0)), 'constant')
-        else:
-            feat = feat[:400]
-        return feat
+    def pad_batch(self, mfcc0, mfcc1, mfcc2):
+        max_len = max([len(_) for _ in mfcc0])
+        l0,l1,l2 = [],[],[]
+        for b0, b1, b2 in zip(mfcc0, mfcc1, mfcc2):
+            l0.append(np.pad(b0, ((0, max_len-len(b0)),(0,0)), 'constant', constant_values=0))
+            l1.append(np.pad(b1, ((0, max_len - len(b1)), (0, 0)), 'constant', constant_values=0))
+            l2.append(np.pad(b2, ((0, max_len - len(b2)), (0, 0)), 'constant', constant_values=0))
+        return np.array(l0), np.array(l1), np.array(l2)
+
 
     def feature_extract(self, sig, rate, filename):
         """
@@ -55,7 +58,7 @@ class _ModelBase:
             plotter.plot_mfcc(mfcc2,'313')
             plotter.show()
         '''
-        return self.pad(mfcc0), self.pad(mfcc1), self.pad(mfcc2), len(mfcc0), len(mfcc1), len(mfcc2)
+        return mfcc0, mfcc1, mfcc2, len(mfcc0), len(mfcc1), len(mfcc2)
 
 
 class RNNModel(_ModelBase):
@@ -72,7 +75,9 @@ class RNNModel(_ModelBase):
         for itr, total_iter, feat, label, files in train_data:
             optim.zero_grad()
             features = [self.feature_extract(a,b,filename) for (a,b),filename in zip(feat,files)]
-            features = [np.array(_) for _ in zip(*features)]
+            features = [_ for _ in zip(*features)]
+            features[0], features[1], features[2] = self.pad_batch(features[0], features[1], features[2])
+            features[3], features[4], features[5] = np.array(features[3]), np.array(features[4]), np.array(features[5])
             mfcc0, mfcc1, mfcc2 = cuda_(Variable(torch.from_numpy(features[0]).float())), \
                                   cuda_(Variable(torch.from_numpy(features[1]).float())),\
                                  cuda_(Variable(torch.from_numpy(features[2]).float()))
@@ -82,7 +87,7 @@ class RNNModel(_ModelBase):
             loss = criterion(out, label)
             loss.backward()
             optim.step()
-            print('%d/%d loss:%f' % (itr,total_iter,loss.data[0]))
+            printer.info('%d/%d loss:%f' % (itr,total_iter,loss.data[0]))
             #break
         #self.eval()
 
@@ -93,7 +98,9 @@ class RNNModel(_ModelBase):
         self.clf.eval()
         for itr, total_iter, feat, label, files in dev_data:
             features = [self.feature_extract(a, b, filename) for (a, b), filename in zip(feat, files)]
-            features = [np.array(_) for _ in zip(*features)]
+            features = [_ for _ in zip(*features)]
+            features[0], features[1], features[2] = self.pad_batch(features[0], features[1], features[2])
+            features[3], features[4], features[5] = np.array(features[3]), np.array(features[4]), np.array(features[5])
             mfcc0, mfcc1, mfcc2 = cuda_(Variable(torch.from_numpy(features[0]).float())), \
                                   cuda_(Variable(torch.from_numpy(features[1]).float())),\
                                  cuda_(Variable(torch.from_numpy(features[2]).float()))
@@ -103,12 +110,12 @@ class RNNModel(_ModelBase):
             pred_ = pred_.data.cpu().numpy().tolist()
             y.extend(label)
             pred.extend(pred_)
-            print('%d/%d loss' % (itr, total_iter))
+            printer.info('%d/%d loss' % (itr, total_iter))
             #for i,_ in enumerate(pred_):
             #    if pred_[i] != label[i]:
             #       logger.info(files[i])
         acc = accuracy_score(y,pred)
-        print(acc)
+        printer.info(acc)
         #cm = confusion_matrix(y, pred)
         #print(cm)
         self.clf.train()

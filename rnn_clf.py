@@ -77,6 +77,37 @@ class RNN(nn.Module):
         out = self.out(torch.cat([hidden[0],hidden[1]], dim=1))
         return out
 
+class CNNRNN(nn.Module):
+    """
+    CNN-RNN classifier
+    """
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(1,16,(9,9))
+        self.maxpool1 = nn.MaxPool2d(2,2)
+        self.fc = nn.Linear(16 * 31, 50)
+        self.enc = nn.GRU(50,50,bidirectional=True)
+        self.out = nn.Linear(100,20)
+
+    def forward(self, mfcc0, mfcc1, mfcc2, len0):
+        """
+
+        :param mfcc: [T,B,H]
+        :return:
+        """
+        inp = torch.cat([mfcc0, mfcc1, mfcc2], dim=2) # [T,B,H]
+        conv_inp = inp.transpose(0,1).unsqueeze(1) # [B,1,T,H]
+        conv = self.conv1(conv_inp).transpose(0,2).transpose(1,2) # [B,L,T,H]
+        conv = conv.contiguous()
+        conv = conv.view(conv.size(0),conv.size(1),-1)
+        inp_rnn = self.fc(conv)
+        enc_out, hidden = self.enc(inp_rnn) # [T,B,H]
+        #sum_enc_out = enc_out.sum(0)
+        #avg_pool = sum_enc_out / len0_v.unsqueeze(1)
+        #max_pool,_ = torch.max(enc_out,0)
+        out = self.out(torch.cat([hidden[0],hidden[1]], dim=1))
+        return out
+
 class HRNN(nn.Module):
     """
     Hierarchical RNN classifier
@@ -110,16 +141,25 @@ class HRNN(nn.Module):
 class Transformer(nn.Module):
     def __init__(self):
         super().__init__()
-        self.attn_enc = TransformerEncoder(39, 50, n_head=3)
-        self.rnn_enc = DynamicEncoder(39, 50, n_layers=1, dropout=0.0, bidir=True)
+        self.attn_enc = TransformerEncoder(39, 50, n_head=2)
+        self.rnn_enc_1 = DynamicEncoder(78, 50, n_layers=1, dropout=0.0, bidir=True)
+        self.rnn_enc_2 = DynamicEncoder(50, 50, n_layers=1, dropout=0.0, bidir=True)
+        self.hir = 10
         self.out = nn.Linear(100,20)
 
     def forward(self, mfcc0, mfcc1, mfcc2, len0):
+        len1 = [(_ + self.hir - 1) // self.hir for _ in len0]
+        len1 = np.array(len1)
         len0_v = cuda_(Variable(torch.from_numpy(len0).float()))
-        attn_out = self.attn_enc(torch.cat([mfcc0, mfcc1, mfcc2], dim=2))
-        enc_out, hidden = self.rnn_enc(attn_out, len0)
-        #sum_enc_out = enc_out.sum(0)
-        #avg_pool = sum_enc_out / len0_v.unsqueeze(1)
-        #max_pool,_ = torch.max(enc_out,0)
-        out = self.out(torch.cat([hidden[0], hidden[1]], dim=1))
+        len1_v = cuda_(Variable(torch.from_numpy(len1).float()))
+        inp = torch.cat([mfcc0, mfcc1, mfcc2],dim=2)
+        attn_out = self.attn_enc(inp)
+        rnn_inp = torch.cat([inp, attn_out], dim=2)
+        enc_out, hidden = self.rnn_enc_1(rnn_inp, len0)
+        feat = []
+        for t in range(0, enc_out.size(0), self.hir):
+            feat.append(enc_out[t])
+        feat = torch.stack(feat)
+        enc_out2, hidden2 = self.rnn_enc_2(feat, len1)
+        out = self.out(torch.cat([hidden2[0], hidden2[1]], dim=1))
         return out
