@@ -30,9 +30,10 @@ class Config:
         self.val_person = 0.1
         self.frame = 0.02
         self.step = 0.01
-        self.model_path = 'models/transformer.pkl'
+        self.model_path = 'models/transformer-20.pkl'
         self.init_logging_handler()
         self.cuda_device = 0
+        self.lr = 0.001
 
     def init_logging_handler(self):
         current_time = time.strftime("%m-%d-%H-%M-%S", time.localtime())

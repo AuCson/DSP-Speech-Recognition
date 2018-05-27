@@ -143,9 +143,9 @@ class HRNN(nn.Module):
 class Transformer(nn.Module):
     def __init__(self):
         super().__init__()
-        self.attn_enc = TransformerEncoder(39, 50, n_head=2)
-        self.rnn_enc_1 = DynamicEncoder(78, 50, n_layers=1, dropout=0.0, bidir=True)
-        self.rnn_enc_2 = DynamicEncoder(50, 50, n_layers=1, dropout=0.0, bidir=True)
+        self.attn_enc = TransformerEncoder(39, 100, n_head=2)
+        self.rnn_enc_1 = DynamicEncoder(78, 100, n_layers=1, dropout=0.0, bidir=True)
+        self.rnn_enc_2 = DynamicEncoder(100, 100, n_layers=1, dropout=0.0, bidir=True)
 
         self.hir = 10
         self.out = nn.Linear(200,20)
@@ -172,7 +172,7 @@ class Transformer(nn.Module):
         sum_enc_out = enc_out2.sum(0)
         avg_pool = sum_enc_out / len1_v.unsqueeze(1)
         max_pool,_ = torch.max(enc_out2,0)
-        out = self.out(torch.cat([avg_pool, max_pool, hidden2[0], hidden2[1]], dim=1))
+        out = self.out(torch.cat([avg_pool, max_pool], dim=1))
         return out
 
 class Transformer_CNN(nn.Module):

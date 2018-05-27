@@ -45,7 +45,7 @@ class _ModelBase:
         return np.array(l0), np.array(l1), np.array(l2)
 
 
-    def feature_extract(self, sig, rate, filename):
+    def feature_extract(self, sig, rate, filename, augment=False):
         """
         extract every features for training
         :return: 
@@ -53,9 +53,18 @@ class _ModelBase:
         reg = re.compile('(\d+)-(\d+)-(\d+).wav')
         audio = reg.match(filename).group(2)
         left, right = basic_endpoint_detection(sig, rate)
+
+        if augment:
+            shift_min, shift_max = int(-0.05 * rate), int(0.1 * rate)
+            s_l, s_r = random.randint(shift_min, shift_max), random.randint(shift_min, shift_max)
+            left -= s_l
+            right += s_r
+            if left < 0: left = 0
+            if right < 0 : right = 0
+
         sound = sig[left:right].reshape(-1,1)
         #plotter.plot_frame(sound, show=True)
-        mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=1024, winfunc=np.hamming)
+        mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=2048, winfunc=np.hamming)
         mfcc0 = delta(mfcc0,3)
         # mean normalize
         mfcc0 = mfcc0 - np.mean(mfcc0)
@@ -79,14 +88,14 @@ class RNNModel(_ModelBase):
         #self.clf = HRNN()
         self.clf = cuda_(self.clf)
 
-    def train(self):
+    def train(self, lr=cfg.lr):
         #train_data = self.reader.mini_batch_iterator(self.reader.train)
         train_data = self.reader.mini_batch_iterator(self.reader.train)
-        optim = torch.optim.Adam(self.clf.parameters())
+        optim = torch.optim.Adam(self.clf.parameters(), lr=lr)
         criterion = torch.nn.CrossEntropyLoss()
         for itr, total_iter, feat, label, files in train_data:
             optim.zero_grad()
-            features = [self.feature_extract(a,b,filename) for (a,b),filename in zip(feat,files)]
+            features = [self.feature_extract(a,b,filename,augment=True) for (a,b),filename in zip(feat,files)]
             features = [_ for _ in zip(*features)]
             features[0], features[1], features[2] = self.pad_batch(features[0], features[1], features[2])
             features[3], features[4], features[5] = np.array(features[3]), np.array(features[4]), np.array(features[5])
@@ -120,18 +129,22 @@ class RNNModel(_ModelBase):
     def test(self):
         dev_data = self.reader.mini_batch_iterator(self.reader.val_person)
         y,pred = [],[]
-        self.clf.test()
+        err = []
+        self.clf.eval()
         for itr, total_iter, feat, label, files in dev_data:
             pred_ = self.test_iter(itr, total_iter, feat, label, files)
             y.extend(label)
             pred.extend(pred_)
             printer.info('%d/%d loss' % (itr, total_iter))
-            #for i,_ in enumerate(pred_):
-            #    if pred_[i] != label[i]:
-            #       logger.info(files[i])
+            for i,_ in enumerate(pred_):
+                if pred_[i] != label[i]:
+                    err_info = '{} {} {}'.format(files[i],pred_[i], label[i])
+                    err.append(err_info)
             #if itr > 1000: break
         acc = accuracy_score(y,pred)
         printer.info(acc)
+        for e in err:
+            printer.info(e)
         #cm = confusion_matrix(y, pred)
         #print(cm)
         self.clf.train()
@@ -172,16 +185,22 @@ if __name__ == '__main__':
         m.test()
     elif args.mode == 'train':
         prev_acc = 0
+        lr = cfg.lr
+        early_stop = 3
         for i in range(10):
-            m.train()
+            m.train(lr)
             acc = m.test()
             if acc > prev_acc:
                 f = open(cfg.model_path, 'wb')
                 torch.save(m.clf.state_dict(), f)
                 f.close()
                 prev_acc = acc
+                lr *= 0.8
             else:
-                break
+                early_stop -= 1
+                lr *= 0.5
+                if not early_stop:
+                    break
 
     elif args.mode == 'adjust':
         state_dict = torch.load(cfg.model_path)
