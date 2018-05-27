@@ -4,6 +4,19 @@ from __future__ import division
 import numpy
 from features import sigproc
 from scipy.fftpack import dct
+from features.sigproc import to_frames
+
+def stft(sig, rate, winlen, step):
+    """
+    stft spectrogram features
+    :param sig: 
+    :param rate: 
+    :param winlen: 
+    :param step: 
+    :return: 
+    """
+    frames = to_frames(sig, rate, winlen, step)
+
 
 def mfcc(signal,samplerate=16000,winlen=0.025,winstep=0.01,numcep=13,
          nfilt=26,nfft=512,lowfreq=0,highfreq=None,preemph=0.97,ceplifter=22,appendEnergy=True,

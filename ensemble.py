@@ -23,13 +23,12 @@ class EnsembleModel(_ModelBase):
         dev_data = self.reader.mini_batch_iterator(self.reader.val_person)
         y, pred = [], []
         for itr, total_iter, feat, label, files in dev_data:
-            pred_ = self.mfcc_rnn.test_iter(itr, total_iter, feat, label, files)
+            pred_, prob = self.mfcc_rnn.test_iter(itr, total_iter, feat, label, files)
             for i, p in enumerate(pred_):
-                if p in [0,1]:
+                if p in [0,1] and prob[i] < 0.8:
                     pred_[i] = self.pitch_clf01.test_iter(*feat[i])
-                if p in [6,7]:
+                if p in [6,7] and prob[i] < 0.8:
                     pred_[i] = self.pitch_clf67.test_iter(*feat[i])
-
             y.extend(label)
             pred.extend(pred_)
 

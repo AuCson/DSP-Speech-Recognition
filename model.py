@@ -9,6 +9,7 @@ import pickle
 from rnn_clf import RNN, HRNN, cuda_, Transformer, CNNRNN, Transformer_CNN
 import torch
 from torch.autograd import Variable
+import torch.nn.functional as F
 from features.endpoint import basic_endpoint_detection
 import plotter
 import re
@@ -18,6 +19,7 @@ import random
 class _ModelBase:
     def __init__(self):
         self.reader = Reader()
+        self.clf = None
 
     def deviation(self, arr, smooth=1):
         l = []
@@ -45,7 +47,7 @@ class _ModelBase:
         return np.array(l0), np.array(l1), np.array(l2)
 
 
-    def feature_extract(self, sig, rate, filename, augment=False):
+    def feature_extract_mfcc(self, sig, rate, filename, augment=False):
         """
         extract every features for training
         :return: 
@@ -80,6 +82,10 @@ class _ModelBase:
         '''
         return mfcc0, mfcc1, mfcc2, len(mfcc0), len(mfcc1), len(mfcc2)
 
+    def load(self):
+        state_dict = torch.load(cfg.model_path)
+        self.clf.load_state_dict(state_dict)
+
 
 class RNNModel(_ModelBase):
     def __init__(self):
@@ -95,7 +101,7 @@ class RNNModel(_ModelBase):
         criterion = torch.nn.CrossEntropyLoss()
         for itr, total_iter, feat, label, files in train_data:
             optim.zero_grad()
-            features = [self.feature_extract(a,b,filename,augment=True) for (a,b),filename in zip(feat,files)]
+            features = [self.feature_extract_mfcc(a,b,filename,augment=True) for (a,b),filename in zip(feat,files)]
             features = [_ for _ in zip(*features)]
             features[0], features[1], features[2] = self.pad_batch(features[0], features[1], features[2])
             features[3], features[4], features[5] = np.array(features[3]), np.array(features[4]), np.array(features[5])
@@ -113,7 +119,7 @@ class RNNModel(_ModelBase):
         #self.test()
 
     def test_iter(self, itr, total_iter, feat, label, files):
-        features = [self.feature_extract(a, b, filename) for (a, b), filename in zip(feat, files)]
+        features = [self.feature_extract_mfcc(a, b, filename) for (a, b), filename in zip(feat, files)]
         features = [_ for _ in zip(*features)]
         features[0], features[1], features[2] = self.pad_batch(features[0], features[1], features[2])
         features[3], features[4], features[5] = np.array(features[3]), np.array(features[4]), np.array(features[5])
@@ -122,19 +128,23 @@ class RNNModel(_ModelBase):
                               cuda_(Variable(torch.from_numpy(features[2]).float()))
         mfcc0, mfcc1, mfcc2 = mfcc0.transpose(0, 1), mfcc1.transpose(0, 1), mfcc2.transpose(0, 1)
         out = self.clf(mfcc0, mfcc1, mfcc2, features[3])
-        _, pred_ = torch.max(out, 1)
+        out = F.softmax(out, dim=1)
+        prob, pred_ = torch.max(out, 1)
         pred_ = pred_.data.cpu().numpy().tolist()
-        return pred_
+        prob = prob.data.cpu().numpy().tolist()
+        return pred_, prob
 
     def test(self):
         dev_data = self.reader.mini_batch_iterator(self.reader.val_person)
         y,pred = [],[]
+        pred_prob = []
         err = []
         self.clf.eval()
         for itr, total_iter, feat, label, files in dev_data:
-            pred_ = self.test_iter(itr, total_iter, feat, label, files)
+            pred_, prob_ = self.test_iter(itr, total_iter, feat, label, files)
             y.extend(label)
             pred.extend(pred_)
+            pred_prob.extend(prob_)
             printer.info('%d/%d loss' % (itr, total_iter))
             for i,_ in enumerate(pred_):
                 if pred_[i] != label[i]:
@@ -150,9 +160,8 @@ class RNNModel(_ModelBase):
         self.clf.train()
         return acc
 
-    def load(self):
-        state_dict = torch.load(cfg.model_path)
-        self.clf.load_state_dict(state_dict)
+        
+
 
 if __name__ == '__main__':
     random.seed(0)
