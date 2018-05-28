@@ -3,9 +3,10 @@ from features import mfcc, delta, to_frames
 from config import *
 from reader import Reader
 from sklearn.linear_model import SGDClassifier
-from sklearn.preprocessing import robust_scale
+from sklearn.preprocessing import robust_scale, normalize
 from sklearn.metrics import accuracy_score, confusion_matrix
 import pickle
+from features.preprocess import downsampling
 from rnn_clf import RNN, HRNN, cuda_, Transformer, CNNRNN, Transformer_CNN
 import torch
 from torch.autograd import Variable
@@ -18,13 +19,13 @@ import random
 
 class _ModelBase:
     def __init__(self):
-        self.reader = Reader()
+        self.reader = Reader(debug=False)
         self.clf = None
 
     def deviation(self, arr, smooth=1):
         l = []
-        for i in range(len(arr)-smooth):
-            l.append(arr[i+smooth]-arr[i])
+        for i in range(len(arr) - smooth):
+            l.append(arr[i + smooth] - arr[i])
         return np.array(l)
 
     def pad(self, b, shape):
@@ -57,21 +58,29 @@ class _ModelBase:
         left, right = basic_endpoint_detection(sig, rate)
 
         if augment:
-            shift_min, shift_max = int(-0.05 * rate), int(0.1 * rate)
+            shift_min, shift_max = 0, int(0.1 * rate)
             s_l, s_r = random.randint(shift_min, shift_max), random.randint(shift_min, shift_max)
             left -= s_l
             right += s_r
             if left < 0: left = 0
             if right < 0 : right = 0
 
-        sound = sig[left:right].reshape(-1,1)
+        sound = sig[left:right].reshape(-1, 1)
+        #sound = downsampling(sound, rate, 16000)
+        #rate = 16000
+
+
         #plotter.plot_frame(sound, show=True)
-        mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=2048, winfunc=np.hamming)
-        mfcc0 = delta(mfcc0,3)
-        # mean normalize
+        #mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=512, winfunc=np.hamming)
+        mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=1536, winfunc=np.hamming)
         mfcc0 = mfcc0 - np.mean(mfcc0)
-        mfcc1 = self.deviation(mfcc0,5)
-        mfcc2 = self.deviation(mfcc1,5)
+        mfcc1 = self.deviation(mfcc0,2)
+        mfcc2 = self.deviation(mfcc1,2)
+        mfcc0 = delta(mfcc0,3)
+        mfcc1 = delta(mfcc1,3)
+        mfcc2 = delta(mfcc2,3)
+        # mean normalize
+
         '''
         if audio in ['01','00']:
             print(filename)

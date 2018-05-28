@@ -1,6 +1,8 @@
 """
 Model Based on Pitch - handcrafted features
 
+specifically used for:
+
 00, 01 [yu yin]
 06, 07 [bei jing]
 

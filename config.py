@@ -26,9 +26,9 @@ class Config:
         self.cuda = False
         self.batch_size = 32
         self.data_dir = './data/'
-        self.val_instance = 0.1
-        self.val_person = 0.1
-        self.frame = 0.02
+        self.val_instance = 0.0
+        self.val_person = 0.2
+        self.frame = 0.03
         self.step = 0.01
         self.model_path = 'models/transformer-aug.pkl'
         self.init_logging_handler()

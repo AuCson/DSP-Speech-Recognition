@@ -22,7 +22,7 @@ class Reader:
         r = open('debug.txt')
         l = []
         for line in r.readlines():
-            l.append(line.strip())
+            l.append(line.split(' ')[0].strip())
         return l
 
     def data_split(self):
@@ -45,7 +45,7 @@ class Reader:
         random.Random(0).shuffle(inst)
         random.Random(0).shuffle(person)
         train_person, val_person = person[:-int(cfg.val_person * len(person))], person[-int(cfg.val_person * len(person)):]
-        test_inst, val_inst = inst[:-int(cfg.val_instance * len(inst))], inst[-int(cfg.val_instance * len(inst)):]
+        #test_inst, val_inst = inst[:-int(cfg.val_instance * len(inst))], inst[-int(cfg.val_instance * len(inst)):]
         train_files, val_person_files, val_inst_files = [],[],[]
         for file in l:
             obj = reg.match(file)
@@ -53,8 +53,8 @@ class Reader:
                 person, inst = obj.group(1), obj.group(3)
                 if person in val_person:
                     val_person_files.append(file)
-                elif inst in val_inst:
-                    val_inst_files.append(file)
+                #elif inst in val_inst:
+                #    val_inst_files.append(file)
                 else:
                     train_files.append(file)
         print(len(train_files), len(val_person_files), len(val_inst_files))

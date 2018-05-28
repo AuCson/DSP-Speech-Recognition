@@ -18,7 +18,7 @@ from sklearn.preprocessing import RobustScaler
 from itertools import chain
 from sklearn.metrics import accuracy_score
 import pickle
-
+from .preprocess import downsampling
 
 def pitch_feature(sig, rate, gender='male'):
     """
@@ -49,16 +49,6 @@ def slope(seq):
 
 def meanshift(seq1, seq2):
     return np.mean(seq2) - np.mean(seq1)
-
-def downsampling(sig, src_rate, dst_rate):
-    cnt = -1
-    s = []
-    for i in range(len(sig)):
-        if i * dst_rate / src_rate > cnt + 1e-8:
-            cnt += 1
-            s.append(sig[i])
-    return np.array(s)
-
 
 def sub_endpoint_detect(frames):
     amp = [np.abs(_).sum() for _ in frames]

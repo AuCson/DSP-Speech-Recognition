@@ -5,6 +5,7 @@ Reference: Attention Is All You Need, Ashish Vaswani et al., NIPS 2017
 
 """
 from torch import nn
+import torch.nn.functional as F
 import torch
 from torch.nn import init
 import numpy as np
@@ -59,7 +60,7 @@ class ScaledDotProductAttention(nn.Module):
 
     def forward(self, q, k, v, attn_mask=None):
 
-        attn = torch.bmm(q, k.transpose(1, 2)) / self.temper
+        attn = torch.bmm(F.tanh(q), k.transpose(1, 2)) / self.temper
 
         if attn_mask is not None:
 

@@ -17,3 +17,12 @@ def preemphasis(signal, coeff=0.95):
     :returns: the filtered signal.
     """
     return np.append(signal[0], signal[1:] - coeff * signal[:-1])
+
+def downsampling(sig, src_rate, dst_rate):
+    cnt = -1
+    s = []
+    for i in range(len(sig)):
+        if i * dst_rate / src_rate > cnt + 1e-8:
+            cnt += 1
+            s.append(sig[i])
+    return np.array(s)
