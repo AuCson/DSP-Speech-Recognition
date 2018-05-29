@@ -3,7 +3,7 @@ from features import mfcc, delta, to_frames
 from config import *
 from reader import Reader
 from sklearn.linear_model import SGDClassifier
-from sklearn.preprocessing import robust_scale, normalize
+from sklearn.preprocessing import robust_scale, scale
 from sklearn.metrics import accuracy_score, confusion_matrix
 import pickle
 from features.preprocess import downsampling
@@ -69,7 +69,7 @@ class _ModelBase:
         #sound = downsampling(sound, rate, 16000)
         #rate = 16000
 
-
+        sound = scale(sound, with_mean=False)
         #plotter.plot_frame(sound, show=True)
         #mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=512, winfunc=np.hamming)
         mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=1536, winfunc=np.hamming)
