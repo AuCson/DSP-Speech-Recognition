@@ -21,7 +21,7 @@ class TransformerEncoder(nn.Module):
         self.pos_ffn = PositionwiseFeedForward(d_model, d_inner_hid, dropout=dropout)
 
     def forward(self, enc_input, slf_attn_mask=None):
-        enc_output = self.slf_attn(
+        enc_output, attns = self.slf_attn(
             enc_input, enc_input, enc_input, attn_mask=slf_attn_mask)
         enc_output = self.pos_ffn(enc_output)
         return enc_output
@@ -137,7 +137,7 @@ class MultiHeadAttention(nn.Module):
         outputs = self.proj(outputs)
         outputs = self.dropout(outputs)
         norm_outputs = self.layer_norm(outputs + residual).transpose(0,1)
-        return norm_outputs
+        return norm_outputs, attns
 
 class PositionwiseFeedForward(nn.Module):
     ''' A two-feed-forward-layer module '''

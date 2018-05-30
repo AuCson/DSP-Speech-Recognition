@@ -16,99 +16,20 @@ import plotter
 import re
 import argparse
 import random
+from adv_clf import AdvTransformer
+from model import _ModelBase
 
-class _ModelBase:
-    def __init__(self):
-        self.reader = Reader(debug=False)
-        self.clf = None
-
-    def deviation(self, arr, smooth=1):
-        l = []
-        for i in range(len(arr) - smooth):
-            l.append(arr[i + smooth] - arr[i])
-        return np.array(l)
-
-    def pad(self, b, shape):
-        if len(b) < 200:
-            return np.pad(b,((0, 200 - len(b)),(0,0)),'constant',constant_values=0)
-        else:
-            return np.array(b[:200])
-
-    def pad2(self, b, shape):
-        return np.pad(b,shape,'constant',constant_values=0)
-
-    def pad_batch(self, mfcc0, mfcc1, mfcc2):
-        #max_len = max([len(_) for _ in mfcc0])
-        max_len = 200
-        l0,l1,l2 = [],[],[]
-        for b0, b1, b2 in zip(mfcc0, mfcc1, mfcc2):
-            l0.append(self.pad(b0, ((0, max_len - len(b0)),(0,0))))
-            l1.append(self.pad(b1, ((0, max_len - len(b1)), (0, 0))))
-            l2.append(self.pad(b2, ((0, max_len - len(b2)), (0, 0))))
-        return np.array(l0), np.array(l1), np.array(l2)
-
-
-    def feature_extract_mfcc(self, sig, rate, filename, augment=False):
-        """
-        extract every features for training
-        :return: 
-        """
-        reg = re.compile('(\d+)-(\d+)-(\d+).wav')
-        audio = reg.match(filename).group(2)
-        left, right = basic_endpoint_detection(sig, rate)
-
-        if augment:
-            shift_min, shift_max = 0, int(0.1 * rate)
-            s_l, s_r = random.randint(shift_min, shift_max), random.randint(shift_min, shift_max)
-            left -= s_l
-            right += s_r
-            if left < 0: left = 0
-            if right < 0 : right = 0
-
-        sound = sig[left:right].reshape(-1, 1)
-        #sound = downsampling(sound, rate, 16000)
-        #rate = 16000
-
-        sound = scale(sound, with_mean=False)
-        #plotter.plot_frame(sound, show=True)
-        #mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=512, winfunc=np.hamming)
-        mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=1536, winfunc=np.hamming)
-        mfcc0 = mfcc0 - np.mean(mfcc0)
-        mfcc1 = self.deviation(mfcc0,2)
-        mfcc2 = self.deviation(mfcc1,2)
-        mfcc0 = delta(mfcc0,3)
-        mfcc1 = delta(mfcc1,3)
-        mfcc2 = delta(mfcc2,3)
-        # mean normalize
-
-        '''
-        if audio in ['01','00']:
-            print(filename)
-            plotter.plot_mfcc(mfcc0,'311')
-            plotter.plot_mfcc(mfcc1,'312')
-            plotter.plot_mfcc(mfcc2,'313')
-            plotter.show()
-        '''
-        return mfcc0, mfcc1, mfcc2, min(len(mfcc0),200), min(len(mfcc1),200), min(len(mfcc2),200)
-
-    def load(self):
-        state_dict = torch.load(cfg.model_path)
-        self.clf.load_state_dict(state_dict)
-
-
-class RNNModel(_ModelBase):
+class AdvModel(_ModelBase):
     def __init__(self):
         super().__init__()
-        self.clf = Transformer()
-        #self.clf = HRNN()
+        self.clf = AdvTransformer()
         self.clf = cuda_(self.clf)
 
     def train(self, lr=cfg.lr):
-        #train_data = self.reader.mini_batch_iterator(self.reader.train)
-        train_data = self.reader.mini_batch_iterator(self.reader.train)
+        train_data = self.reader.mini_batch_iterator(self.reader.train, requires_speaker=True)
         optim = torch.optim.Adam(self.clf.parameters(), lr=lr)
         criterion = torch.nn.CrossEntropyLoss()
-        for itr, total_iter, feat, label, files in train_data:
+        for itr, total_iter, feat, label, files, speaker in train_data:
             optim.zero_grad()
             features = [self.feature_extract_mfcc(a,b,filename,augment=True) for (a,b),filename in zip(feat,files)]
             features = [_ for _ in zip(*features)]
@@ -119,11 +40,14 @@ class RNNModel(_ModelBase):
                                  cuda_(Variable(torch.from_numpy(features[2]).float()))
             mfcc0, mfcc1, mfcc2 = mfcc0.transpose(0,1), mfcc1.transpose(0,1), mfcc2.transpose(0,1)
             label = cuda_(Variable(torch.LongTensor(label)))
-            out = self.clf(mfcc0, mfcc1, mfcc2, features[3])
-            loss = criterion(out, label)
+            speaker = cuda_(Variable(torch.LongTensor(speaker)))
+            out1, out2 = self.clf(mfcc0, mfcc1, mfcc2, features[3])
+            loss1 = criterion(out1, label)
+            loss2 = criterion(out2, speaker)
+            loss = loss1 + loss2
             loss.backward()
             optim.step()
-            printer.info('%d/%d loss:%f' % (itr,total_iter,loss.data[0]))
+            printer.info('%d/%d loss:%f %f %f' % (itr,total_iter,loss1.data[0], loss2.data[0], loss.data[0]))
             #break
         #self.test()
 
@@ -136,7 +60,7 @@ class RNNModel(_ModelBase):
                               cuda_(Variable(torch.from_numpy(features[1]).float())), \
                               cuda_(Variable(torch.from_numpy(features[2]).float()))
         mfcc0, mfcc1, mfcc2 = mfcc0.transpose(0, 1), mfcc1.transpose(0, 1), mfcc2.transpose(0, 1)
-        out = self.clf(mfcc0, mfcc1, mfcc2, features[3])
+        out,_ = self.clf(mfcc0, mfcc1, mfcc2, features[3])
         out = F.softmax(out, dim=1)
         prob, pred_ = torch.max(out, 1)
         pred_ = pred_.data.cpu().numpy().tolist()
@@ -194,7 +118,7 @@ if __name__ == '__main__':
     if cfg.cuda:
         torch.cuda.set_device(cfg.cuda_device)
 
-    m = RNNModel()
+    m = AdvModel()
     if args.mode == 'test':
         state_dict = torch.load(cfg.model_path)
         m.clf.load_state_dict(state_dict)

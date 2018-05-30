@@ -16,6 +16,29 @@ def orth_gru(gru):
             torch.nn.init.orthogonal(hh[i:i+gru.hidden_size],gain=1)
     return gru
 
+class SPPLayer(nn.Module):
+
+    def __init__(self, num_levels, pool_type='max_pool'):
+        super(SPPLayer, self).__init__()
+
+        self.num_levels = num_levels
+        self.pool_type = pool_type
+
+    def forward(self, x):
+        bs, c, h, w = x.size()
+        pooling_layers = []
+        for i in range(self.num_levels):
+            kernel_size = h // (2 ** i)
+            if self.pool_type == 'max_pool':
+                tensor = F.max_pool2d(x, kernel_size=kernel_size,
+                                      stride=kernel_size).view(bs, -1)
+            else:
+                tensor = F.avg_pool2d(x, kernel_size=kernel_size,
+                                      stride=kernel_size).view(bs, -1)
+            pooling_layers.append(tensor)
+        x = torch.cat(pooling_layers, dim=-1)
+        return x
+
 class DynamicEncoder(nn.Module):
     """
     Encoder: No need for input lens to be sorted
@@ -116,10 +139,11 @@ class HRNN(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        self.hir = 10
-        self.enc1 = DynamicEncoder(39, 50, n_layers=1, dropout=0.0, bidir=True)
-        self.enc2 = DynamicEncoder(50, 50, n_layers=1, dropout=0.0, bidir=True)
-        self.out = nn.Linear(200, 20)
+        self.hir = 5
+        self.hidden_size = 200
+        self.enc1 = DynamicEncoder(39, 200, n_layers=2, dropout=0.2, bidir=True)
+        self.enc2 = DynamicEncoder(200, 200, n_layers=1, dropout=0.0, bidir=True)
+        self.out = nn.Linear(400, 20)
 
     def forward(self, mfcc0, mfcc1, mfcc2, len0):
         len1 = [(_+self.hir-1) // self.hir for _ in len0]
@@ -127,6 +151,9 @@ class HRNN(nn.Module):
         len0_v = cuda_(Variable(torch.from_numpy(len0).float()))
         len1_v = cuda_(Variable(torch.from_numpy(len1).float()))
         enc_out, hidden = self.enc1(torch.cat([mfcc0, mfcc1, mfcc2], dim=2), len0)
+
+        enc_out = enc_out[:,:,-self.hidden_size:]
+        #hidden =  hidden[-2:,:,:]
 
         feat = []
         for t in range(0, enc_out.size(0), self.hir):
@@ -137,29 +164,31 @@ class HRNN(nn.Module):
         sum_enc_out = enc_out2.sum(0)
         avg_pool = sum_enc_out / len1_v.unsqueeze(1)
         max_pool, _ = torch.max(enc_out2, 0)
-        out = self.out(torch.cat([avg_pool, max_pool, hidden2[0], hidden2[1]], dim=1))
+        out = self.out(torch.cat([avg_pool, max_pool], dim=1))
+        out = F.dropout(out, 0.2)
         return out
 
 class Transformer(nn.Module):
     def __init__(self):
         super().__init__()
-        self.attn_enc = TransformerEncoder(39, 100, n_head=1)
+        self.attn_enc = TransformerEncoder(39, 100, n_head=1, d_k=100, d_v=100)
         self.rnn_enc_1 = DynamicEncoder(78, 200, n_layers=1, dropout=0.0, bidir=True)
         self.rnn_enc_2 = DynamicEncoder(200, 200, n_layers=1, dropout=0.0, bidir=True)
 
         self.hir = 5
         self.out = nn.Linear(400,20)
+        self.hidden_size = 200
 
-    def forward(self, mfcc0, mfcc1, mfcc2, len0):
+    def forward(self, mfcc0, mfcc1, mfcc2, len0, return_feature=False):
         len1 = [(_ + self.hir - 1) // self.hir for _ in len0]
         len1 = np.array(len1)
         len0_v = cuda_(Variable(torch.from_numpy(len0).float()))
         len1_v = cuda_(Variable(torch.from_numpy(len1).float()))
         inp = torch.cat([mfcc0, mfcc1, mfcc2],dim=2)
-        attn_out = F.dropout(self.attn_enc(inp),0.2)
+        attn_out = F.dropout(self.attn_enc(inp),0.5)
         rnn_inp = torch.cat([inp, attn_out], dim=2)
         enc_out, hidden = self.rnn_enc_1(rnn_inp, len0)
-        enc_out = F.dropout(enc_out,0.2)
+        enc_out = enc_out[:, :, -self.hidden_size:]
 
         feat = []
         for t in range(0, enc_out.size(0), self.hir):
@@ -167,39 +196,17 @@ class Transformer(nn.Module):
         feat = torch.stack(feat)
 
         enc_out2, hidden2 = self.rnn_enc_2(feat, len1)
-        enc_out2 = F.dropout(enc_out2,0.2)
 
         sum_enc_out = enc_out2.sum(0)
         avg_pool = sum_enc_out / len1_v.unsqueeze(1)
         max_pool,_ = torch.max(enc_out2,0)
-        out = self.out(torch.cat([avg_pool, max_pool], dim=1))
+        feat = torch.cat([avg_pool, max_pool], dim=1)
+        out = self.out(feat)
         out = F.dropout(out, 0.2)
-        return out
+        if not return_feature:
+            return out
+        else:
+            return out, feat
 
-
-class Transformer_CNN(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.attn_enc = TransformerEncoder(39, 50, n_head=2)
-        self.rnn_enc_1 = DynamicEncoder(78, 50, n_layers=1, dropout=0.0, bidir=True)
-        #self.rnn_enc_2 = DynamicEncoder(50, 50, n_layers=1, dropout=0.0, bidir=True)
-        self.conv = nn.Conv2d(1,2,(21,1),stride=(3,1)) # only pools on time
-
-    def forward(self, mfcc0, mfcc1, mfcc2, len0):
-        #len1 = [(_ + self.hir - 1) // self.hir for _ in len0]
-        #len1 = np.array(len1)
-        len0_v = cuda_(Variable(torch.from_numpy(len0).float()))
-        #len1_v = cuda_(Variable(torch.from_numpy(len1).float()))
-        inp = torch.cat([mfcc0, mfcc1, mfcc2],dim=2)
-        attn_out = self.attn_enc(inp)
-        rnn_inp = torch.cat([inp, attn_out], dim=2)
-        enc_out, hidden = self.rnn_enc_1(rnn_inp, len0)
-        enc_out = F.dropout(enc_out) # [T,B,H]
-
-        conv_input = enc_out.transpose(0,1).unsqueeze(1) # [B,1,T,H]
-        conv = self.conv(conv_input) # [B,F,T_s,H]
-        
-        
-
-        out = self.out(torch.cat([avg_pool, max_pool], dim=1))
-        return out
+class CNNClassifier(nn.Module):
+    pass
