@@ -1,3 +1,18 @@
+"""
+
+https://github.com/HanqingLu/MultiscaleRNN.git
+
+@article{DBLP:journals/corr/ChungAB16,
+  author    = {Junyoung Chung and
+               Sungjin Ahn and
+               Yoshua Bengio},
+  title     = {Hierarchical Multiscale Recurrent Neural Networks},
+  journal   = {CoRR},
+  volume    = {abs/1609.01704},
+  year      = {2016}
+}
+
+"""
 import torch
 from torch.autograd import Function, Variable
 import torch.nn.functional as Func

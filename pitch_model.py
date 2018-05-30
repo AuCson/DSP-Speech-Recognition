@@ -89,6 +89,6 @@ class PitchModel(_ModelBase):
 
 
 if __name__ == '__main__':
-    m = PitchModel([6,7])
+    m = PitchModel([0,1])
     m.train()
     m.test()

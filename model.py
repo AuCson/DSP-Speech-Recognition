@@ -96,7 +96,7 @@ class _ModelBase:
 class RNNModel(_ModelBase):
     def __init__(self):
         super().__init__()
-        self.clf = HMRNN()
+        self.clf = HRNN()
         #self.clf = CNN_SP()
         self.clf = cuda_(self.clf)
 
