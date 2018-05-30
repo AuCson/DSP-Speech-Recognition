@@ -5,6 +5,8 @@ from torch.autograd import Variable
 import numpy as np
 from config import cfg
 from transformer import TransformerEncoder
+from collections import OrderedDict
+from resnet import resnet18
 
 def cuda_(var):
     return var.cuda() if cfg.cuda else var
@@ -25,10 +27,10 @@ class SPPLayer(nn.Module):
         self.pool_type = pool_type
 
     def forward(self, x):
-        bs, c, h, w = x.size()
+        bs, c, h, w = x.size() # [B,C,T,H]
         pooling_layers = []
         for i in range(self.num_levels):
-            kernel_size = h // (2 ** i)
+            kernel_size = (h // (2 ** i),1)
             if self.pool_type == 'max_pool':
                 tensor = F.max_pool2d(x, kernel_size=kernel_size,
                                       stride=kernel_size).view(bs, -1)
@@ -100,37 +102,6 @@ class RNN(nn.Module):
         out = self.out(torch.cat([hidden[0],hidden[1]], dim=1))
         return out
 
-class CNNRNN(nn.Module):
-    """
-    CNN-RNN classifier
-    """
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1,16,(9,9))
-        self.maxpool1 = nn.MaxPool2d(2,2)
-        self.fc = nn.Linear(16 * 31, 50)
-        self.enc = nn.GRU(50,50,bidirectional=True)
-        self.out = nn.Linear(100,20)
-
-    def forward(self, mfcc0, mfcc1, mfcc2, len0):
-        """
-
-        :param mfcc: [T,B,H]
-        :return:
-        """
-        inp = torch.cat([mfcc0, mfcc1, mfcc2], dim=2) # [T,B,H]
-        conv_inp = inp.transpose(0,1).unsqueeze(1) # [B,1,T,H]
-        conv = self.conv1(conv_inp).transpose(0,2).transpose(1,2) # [B,L,T,H]
-        conv = conv.contiguous()
-        conv = conv.view(conv.size(0),conv.size(1),-1)
-        inp_rnn = self.fc(conv)
-        enc_out, hidden = self.enc(inp_rnn) # [T,B,H]
-        #sum_enc_out = enc_out.sum(0)
-        #avg_pool = sum_enc_out / len0_v.unsqueeze(1)
-        #max_pool,_ = torch.max(enc_out,0)
-        out = self.out(torch.cat([hidden[0],hidden[1]], dim=1))
-        return out
-
 class HRNN(nn.Module):
     """
     Hierarchical RNN classifier
@@ -171,8 +142,8 @@ class HRNN(nn.Module):
 class Transformer(nn.Module):
     def __init__(self):
         super().__init__()
-        self.attn_enc = TransformerEncoder(39, 100, n_head=1, d_k=100, d_v=100)
-        self.rnn_enc_1 = DynamicEncoder(78, 200, n_layers=1, dropout=0.0, bidir=True)
+        self.attn_enc = TransformerEncoder(39, 200, n_head=1, d_k=100, d_v=100)
+        self.rnn_enc_1 = DynamicEncoder(78, 200, n_layers=1, dropout=0.2, bidir=True)
         self.rnn_enc_2 = DynamicEncoder(200, 200, n_layers=1, dropout=0.0, bidir=True)
 
         self.hir = 5
@@ -184,10 +155,11 @@ class Transformer(nn.Module):
         len1 = np.array(len1)
         len0_v = cuda_(Variable(torch.from_numpy(len0).float()))
         len1_v = cuda_(Variable(torch.from_numpy(len1).float()))
+        mask = self.make_mask(len0)
         inp = torch.cat([mfcc0, mfcc1, mfcc2],dim=2)
-        attn_out = F.dropout(self.attn_enc(inp),0.5)
-        rnn_inp = torch.cat([inp, attn_out], dim=2)
-        enc_out, hidden = self.rnn_enc_1(rnn_inp, len0)
+        attn_out,_ = self.attn_enc(inp, mask)
+        attn_out = F.dropout(attn_out, 0.5)
+        enc_out, hidden = self.rnn_enc_1(torch.cat([inp, attn_out], 2), len0)
         enc_out = enc_out[:, :, -self.hidden_size:]
 
         feat = []
@@ -208,5 +180,22 @@ class Transformer(nn.Module):
         else:
             return out, feat
 
-class CNNClassifier(nn.Module):
-    pass
+    def make_mask(self, len0):
+        mask = np.zeros((200, len(len0))) #[T,B]
+        for b in range(len(len0)):
+            for t in range(len0[b]):
+                mask[t][b] = 1
+        var = cuda_(Variable(torch.from_numpy(mask).float()))
+        return var
+
+
+class CNN_SP(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.resnet = resnet18(pretrained=False, num_classes=20)
+
+    def forward(self, mfcc0, mfcc1, mfcc2, len0):
+        inp = torch.cat([mfcc0, mfcc1, mfcc2], dim=2) # [T,B,H]
+        inp = inp.transpose(0,1).unsqueeze(1)
+        out = self.resnet(inp)
+        return out

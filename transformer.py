@@ -24,7 +24,7 @@ class TransformerEncoder(nn.Module):
         enc_output, attns = self.slf_attn(
             enc_input, enc_input, enc_input, attn_mask=slf_attn_mask)
         enc_output = self.pos_ffn(enc_output)
-        return enc_output
+        return enc_output, attns
 
 class LayerNormalization(nn.Module):
     ''' Layer normalization module '''
