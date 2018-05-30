@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
 from config import cfg
-from transformer import TransformerEncoder
 
 def cuda_(var):
     return var.cuda() if cfg.cuda else var

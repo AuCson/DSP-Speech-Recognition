@@ -8,7 +8,7 @@ from transformer import TransformerEncoder
 from collections import OrderedDict
 from resnet import resnet18
 from layers import *
-
+from hmrnn import HM_Net, HM_LSTM
 
 class RNN(nn.Module):
     """
@@ -120,6 +120,42 @@ class HRNN_Att(HRNN):
         else:
             return out, feat
 
+class HMRNN(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.hir = 5
+        self.hidden_size = 200
+        self.enc1 = HM_LSTM(1.0, 39, [200,200])
+        self.out = nn.Linear(400, 20)
+
+    def forward(self, mfcc0, mfcc1, mfcc2, len0, return_feature=False):
+        len1 = [(_+self.hir-1) // self.hir for _ in len0]
+        len1 = np.array(len1)
+        len0_v = cuda_(Variable(torch.from_numpy(len0).float()))
+        len1_v = cuda_(Variable(torch.from_numpy(len1).float()))
+        h_1, h_2, z_1, z_2, hidden = self.enc1(torch.cat([mfcc0, mfcc1, mfcc2], dim=2), None) # [B,T,G]
+
+        mask = self.mask(len0).unsqueeze(2) # [B,T,1]
+        enc_out = h_2 * mask
+        enc_out = enc_out.transpose(0,1)
+        sum_enc_out = enc_out.sum(0)
+        avg_pool = sum_enc_out / len0_v.unsqueeze(1)
+        max_pool, _ = torch.max(enc_out, 0)
+        feat = torch.cat([avg_pool, max_pool], dim=1)
+        out = self.out(feat)
+        out = F.dropout(out, 0.2)
+        if not return_feature:
+            return out
+        else:
+            return out, feat
+
+    def mask(self, len0):
+        mask = np.zeros((len(len0), 200)) # [B,T]
+        for b in range(len(len0)):
+            for t in range(len0[b]):
+                mask[b][t] = 1.0
+        mask = cuda_(Variable(torch.from_numpy(mask).float()))
+        return mask
 
 class Transformer(nn.Module):
     def __init__(self):

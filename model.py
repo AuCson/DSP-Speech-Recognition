@@ -7,7 +7,7 @@ from sklearn.preprocessing import robust_scale, scale
 from sklearn.metrics import accuracy_score, confusion_matrix
 import pickle
 from features.preprocess import downsampling
-from rnn_clf import RNN, HRNN, cuda_, Transformer, CNN_SP, HRNN_Att
+from rnn_clf import RNN, HRNN, cuda_, Transformer, CNN_SP, HRNN_Att, HMRNN
 import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
@@ -96,7 +96,7 @@ class _ModelBase:
 class RNNModel(_ModelBase):
     def __init__(self):
         super().__init__()
-        self.clf = HRNN_Att()
+        self.clf = HMRNN()
         #self.clf = CNN_SP()
         self.clf = cuda_(self.clf)
 
