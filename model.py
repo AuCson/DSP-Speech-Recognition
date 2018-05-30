@@ -7,7 +7,7 @@ from sklearn.preprocessing import robust_scale, scale
 from sklearn.metrics import accuracy_score, confusion_matrix
 import pickle
 from features.preprocess import downsampling
-from rnn_clf import RNN, HRNN, cuda_, Transformer, CNN_SP
+from rnn_clf import RNN, HRNN, cuda_, Transformer, CNN_SP, HRNN_Att
 import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
@@ -55,7 +55,7 @@ class _ModelBase:
         """
         reg = re.compile('(\d+)-(\d+)-(\d+).wav')
         audio = reg.match(filename).group(2)
-        left, right = basic_endpoint_detection(sig, rate)
+        left, right, amp, zcr = basic_endpoint_detection(sig, rate, return_feature=True)
 
         if augment:
             shift_min, shift_max = 0, int(0.1 * rate)
@@ -66,9 +66,6 @@ class _ModelBase:
             if right < 0 : right = 0
 
         sound = sig[left:right].reshape(-1, 1)
-        #sound = downsampling(sound, rate, 16000)
-        #rate = 16000
-
         sound = scale(sound, with_mean=False)
         #plotter.plot_frame(sound, show=True)
         #mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=512, winfunc=np.hamming)
@@ -99,7 +96,7 @@ class _ModelBase:
 class RNNModel(_ModelBase):
     def __init__(self):
         super().__init__()
-        self.clf = HRNN()
+        self.clf = HRNN_Att()
         #self.clf = CNN_SP()
         self.clf = cuda_(self.clf)
 

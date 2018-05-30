@@ -12,7 +12,7 @@ from reader import Reader
 from features.preprocess import preemphasis
 from config import cfg, meta
 
-def basic_endpoint_detection(sig, rate):
+def basic_endpoint_detection(sig, rate, return_feature=False):
     """
     Basic endpoint detection based on energy and zpr. 
     :param frames: list of 1-d numpy array
@@ -41,7 +41,10 @@ def basic_endpoint_detection(sig, rate):
     if right2 - left2 < 50:
         left2 = 0
         right2 = len(frames)
-    return int(left2 * cfg.step * rate),  int(right2 * cfg.step * rate)
+    if not return_feature:
+        return int(left2 * cfg.step * rate),  int(right2 * cfg.step * rate)
+    else:
+        return int(left2 * cfg.step * rate),  int(right2 * cfg.step * rate), amp, zcr
 
 def get_amplitude(frames, window='dirc', use_sq=False):
     """

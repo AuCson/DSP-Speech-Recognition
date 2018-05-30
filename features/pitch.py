@@ -18,7 +18,7 @@ from sklearn.preprocessing import RobustScaler
 from itertools import chain
 from sklearn.metrics import accuracy_score
 import pickle
-from .preprocess import downsampling
+from features.preprocess import downsampling
 
 def pitch_feature(sig, rate, gender='male'):
     """
@@ -39,7 +39,7 @@ def pitch_feature(sig, rate, gender='male'):
     print(str_idx_1,str_idx_2)
     feat = slope(strs_1), slope(strs_2), meanshift(strs_1, strs_2), l2 / l1, (str_idx_2[0] - str_idx_1[1])/len(frames)
     print(feat)
-    #plot_frame(pitch, where='212',show=True)
+    plot_frame(pitch, where='212',show=True)
     return feat
 
 def slope(seq):
@@ -64,7 +64,7 @@ def sub_endpoint_detect(frames):
         if s > max_score:
             max_score = s
             p = i
-    #plot_frame(amp, where='211',sep=[p])
+    plot_frame(amp, where='211',sep=[p])
     if p == 0:
         return len(amp) // 2
     return p
@@ -113,16 +113,23 @@ def robust_max_pitch(g, g_idx):
             pitch[i] = 2 * pitch[i]
     return pitch
 
+def fix_half(log_sig):
+    for i in range(int(10000//300), int(10000//200)):
+        freq = 10000 // i
+        log_sig[i] += log_sig[10000 // (freq // 2)]
+    return log_sig
+
 def pitch_detect_frame(frame, rate, gender):
     # add hamming window
-    frame = window(frame, rate, 1000, 'hamming')
+    frame = window(frame, rate, 50, 1000, 'hamming')
     Xw = np.fft.fft(frame, len(frame))
     log_Xw = np.log(np.abs(Xw))
-    #log_Xw = np.concatenate([log_Xw,np.zeros(1000)])
     log_sig = np.fft.ifft(log_Xw, len(log_Xw))
+    #log_sig = fix_half(log_sig)
     scores, scores_idx = peak_score(np.abs(log_sig[:len(log_sig) // 2]), gender)
-    #plot_frame(np.abs(frame), where='211')
-    #plot_frame(np.abs(log_sig), where='212',show=True)
+    #log_sig = fix_half(log_sig)
+    plot_frame(np.abs(frame), where='211')
+    plot_frame(np.abs(log_sig), where='212',show=True)
     return scores, scores_idx
 
 
@@ -189,7 +196,7 @@ def find_smooth_subsequence(pitch, base_tor=2, base_thres=30, bias=0):
 
 if __name__ == '__main__':
 
-    r = Reader(debug=False)
+    r = Reader(debug=True)
     train_itr = r.iterator(r.train)
     val_itr = r.iterator(r.val_person)
     cnt = 0

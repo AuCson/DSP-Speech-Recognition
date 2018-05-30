@@ -1,4 +1,4 @@
-from rnn_clf import Transformer
+from rnn_clf import HRNN
 import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
@@ -16,21 +16,23 @@ class GradientReverse(torch.autograd.Function):
         self.gamma = gamma
 
     def forward(self, x):
-        return x
+        return x.view_as(x)
 
     def backward(self, grad):
         return -grad * self.gamma
 
 
-class AdvTransformer(nn.Module):
+class AdvHRNN(nn.Module):
     def __init__(self):
         super().__init__()
-        self.g = Transformer()
-        self.rev = GradientReverse()
-        self.d = nn.Linear(400, 35)
+        self.g = HRNN()
+        self.rev = GradientReverse(0.01)
+        self.d1 = nn.Linear(400, 200)
+        self.d2 = nn.Linear(200, 35)
 
     def forward(self, mfcc0, mfcc1, mfcc2, len0):
-        out1, feat = self.g(mfcc0, mfcc1, mfcc2, len0, return_feature=True)
+        out_lb, feat = self.g(mfcc0, mfcc1, mfcc2, len0, return_feature=True)
         feat = self.rev(feat)
-        out2 = self.d(feat)
-        return out1, out2
+        out1 = F.tanh(self.d1(feat))
+        out2 = self.d2(out1)
+        return out_lb, out2

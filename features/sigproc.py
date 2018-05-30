@@ -19,7 +19,7 @@ def to_frames(sig, rate, t=0.020, step=0.010):
     return framesig(sig, int(rate * t), int(step * rate))
 
 
-def window(sig, rate, thres, wintype='square'):
+def window(sig, rate, low_freq=0, high_freq=500, wintype='square'):
     """
     add a window to the signal.
     low-pass filter
@@ -34,8 +34,9 @@ def window(sig, rate, thres, wintype='square'):
     """
     # ideal filter H_d(w)
     N = len(sig)
-    wc = np.ones(int(thres / rate * N))
-    Hd_w = np.pad(wc,((0, N-len(wc))),'constant',constant_values=(0,0))
+    Hd_w = np.zeros(N)
+    for i in range(int(N * low_freq / rate), int(N * high_freq / rate)):
+        Hd_w[i] = 1
     # back into time space
     hd_w = np.fft.ifft(Hd_w, N)
     # add window

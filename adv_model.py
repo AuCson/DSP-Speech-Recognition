@@ -16,13 +16,13 @@ import plotter
 import re
 import argparse
 import random
-from adv_clf import AdvTransformer
+from adv_clf import AdvHRNN
 from model import _ModelBase
 
 class AdvModel(_ModelBase):
     def __init__(self):
         super().__init__()
-        self.clf = AdvTransformer()
+        self.clf = AdvHRNN()
         self.clf = cuda_(self.clf)
 
     def train(self, lr=cfg.lr):
@@ -37,7 +37,7 @@ class AdvModel(_ModelBase):
             features[3], features[4], features[5] = np.array(features[3]), np.array(features[4]), np.array(features[5])
             mfcc0, mfcc1, mfcc2 = cuda_(Variable(torch.from_numpy(features[0]).float())), \
                                   cuda_(Variable(torch.from_numpy(features[1]).float())),\
-                                 cuda_(Variable(torch.from_numpy(features[2]).float()))
+                                  cuda_(Variable(torch.from_numpy(features[2]).float()))
             mfcc0, mfcc1, mfcc2 = mfcc0.transpose(0,1), mfcc1.transpose(0,1), mfcc2.transpose(0,1)
             label = cuda_(Variable(torch.LongTensor(label)))
             speaker = cuda_(Variable(torch.LongTensor(speaker)))
