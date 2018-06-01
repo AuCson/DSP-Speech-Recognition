@@ -5,6 +5,7 @@ Date: 2018.05.24
 
 Pitch detection using cesptrum
 """
+import features
 import numpy as np
 from features.preprocess import preemphasis
 from features.sigproc import to_frames, window
@@ -27,18 +28,18 @@ def pitch_feature(sig, rate, gender='male'):
     :return:
     """
 
-    pitch, frames = pitch_detect(sig, rate, gender=gender)
+    pitch, frames = pitch_detect_sr(sig, rate)
     p = sub_endpoint_detect(frames)
     p_bias = 5 if p > 15 else 0
     amp = scale(get_amplitude(frames))
     amp1, amp2 = amp[p_bias:p], amp[p:]
-    strs_1, str_idx_1 = find_smooth_subsequence(pitch[p_bias:p],base_tor=4,bias=p_bias)
-    strs_2, str_idx_2 = find_smooth_subsequence(pitch[p:],base_tor=4, bias=p)
+    strs_1, str_idx_1 = find_smooth_subsequence(pitch[p_bias:p],base_tor=2,bias=p_bias)
+    strs_2, str_idx_2 = find_smooth_subsequence(pitch[p:],base_tor=2, bias=p)
     l1,l2 = str_idx_1[1] - str_idx_1[0], str_idx_2[1] - str_idx_2[0]
     print(str_idx_1,str_idx_2)
-    feat = slope(strs_1), slope(strs_2), peakshift(amp1, amp2)
+    feat = slope(strs_1), slope(strs_2), peakshift(amp1, amp2), np.std(pitch[:p]), np.std(pitch[p:])
     print(feat)
-    #plot_frame(pitch, where='212',show=True)
+    plot_frame(pitch, where='212',show=True)
     return feat
 
 def slope(seq):
@@ -64,7 +65,7 @@ def sub_endpoint_detect(frames):
         if s > max_score:
             max_score = s
             p = i
-    #plot_frame(amp, where='211',sep=[p])
+    plot_frame(amp, where='211',sep=[p])
     if p == 0:
         return len(amp) // 2
     return p
@@ -81,6 +82,57 @@ def pitch_detect(sig, rate, winlen=0.0512, step=0.01, gender='male'):
     scores = [peak_score(log_sig) for log_sig in log_sigs]
     pitch = robust_max_pitch(scores)
     return pitch, frames
+
+def pitch_detect_sr(sig, rate, winlen=0.0512, step=0.01):
+    """
+    detect the pitch with self relevance score.
+    """
+    sig = downsampling(sig, rate, 10000)
+    frames = to_frames(sig, 10000, winlen, step)
+    scores = []
+    for frame in frames:
+        score = pitch_detect_frame_sr(frame, 10000)
+        scores.append(peak_score(score))
+    pitch = max_pitch(scores, bias=0)
+    return pitch, frames
+    
+def pitch_detect_frame_sr(frame, rate):
+    """
+    resolution is $rate
+    0.0512 * 10000 = 512 points
+    move 1 point gives 100000 Hz (T=1e-4)
+    move n points: T = n * 1e-4
+    range should be within 50 - 500 Hz
+    That is 20 points to 200 points. 
+    each points gives 1e-4 resolution in time scope
+    """
+    def score(frame, n):
+        s = 0
+        for i in range(n, n + 300):
+            s += frame[i] * frame[i-n]
+        return s
+    frame = window(frame, rate, 50, 900, 'hamming')
+    frame = np.abs(frame)
+    frame = center_clip(frame)
+    min_shift = 0
+    max_shift = int(rate / 50)
+    scores = []
+    for n in range(min_shift, max_shift):
+        scores.append(score(frame, n))
+    #plot_frame(frame, where='212')
+    #plot_frame(scores,where='211',show=True)
+    return scores
+            
+
+def pitch_detect_frame(frame, rate, gender):
+    # add hamming window
+    frame = window(frame, rate, 50, 1000, 'hamming')
+    Xw = np.fft.fft(frame, len(frame))
+    log_Xw = np.log(np.abs(Xw))
+    log_sig = np.fft.ifft(log_Xw, len(log_Xw))
+    #plot_frame(np.abs(frame), where='211')
+    #plot_frame(np.abs(log_sig), where='212',show=True)
+    return np.abs(log_sig)
 
 def center_clip(frame):
     med = np.median(frame[frame>=0])
@@ -103,10 +155,10 @@ def smooth(g, degree=2):
     g = g.tolist()
     return g
 
-def max_pitch(g):
+def max_pitch(g, bias=20):
     pitch = []
     for l in g:
-        idx = 20 + np.argmax(l)
+        idx = bias + np.argmax(l)
         p = 1 / (0.0001 * idx)
         pitch.append(p)
     return pitch
@@ -147,17 +199,6 @@ def dp_max_pitch(g):
         step = prev[i][step]
         i -= 1
     return path.tolist()
-
-def pitch_detect_frame(frame, rate, gender):
-    # add hamming window
-    frame = window(frame, rate, 50, 1000, 'hamming')
-    Xw = np.fft.fft(frame, len(frame))
-    log_Xw = np.log(np.abs(Xw))
-    log_sig = np.fft.ifft(log_Xw, len(log_Xw))
-    #plot_frame(np.abs(frame), where='211')
-    #plot_frame(np.abs(log_sig), where='212',show=True)
-    return np.abs(log_sig)
-
 
 def peak_score(sig, gender='male'):
     l = []
@@ -231,6 +272,7 @@ if __name__ == '__main__':
         reg = re.compile('(\d+)-(\d+)-(\d+).wav')
         audio = reg.match(filename).group(2)
         person = reg.match(filename).group(1)
+        if person.endswith('83'): continue
         #if not (person[3:7] == '0713' and int(person[7:]) < 300):
         #    continue
         if audio not in ['00', '01']:
@@ -238,7 +280,7 @@ if __name__ == '__main__':
         print(person, label, filename)
         cnt += 1
         l, r = basic_endpoint_detection(sig, rate)
-        sig = preemphasis(sig, coeff=0.97)
+        #sig = preemphasis(sig, coeff=0.97)
         frames = to_frames(sig[l:r], rate)
         feature = pitch_feature(sig[l:r], rate)
         p.append((feature[0],feature[2]))
@@ -258,6 +300,7 @@ if __name__ == '__main__':
         print(person,label,filename)
         cnt += 1
         l ,r = basic_endpoint_detection(sig, rate)
+        #sig = preemphasis(sig, coeff=0.97)
         frames = to_frames(sig[l:r], rate)
         feature = pitch_feature(sig[l:r], rate)
         X_test.append(feature)
