@@ -33,19 +33,24 @@ def pitch_feature(sig, rate, gender='male'):
     p_bias = 5 if p > 15 else 0
     amp = scale(get_amplitude(frames))
     amp1, amp2 = amp[p_bias:p], amp[p:]
-    strs_1, str_idx_1 = find_smooth_subsequence(pitch[p_bias:p],base_tor=2,bias=p_bias)
-    strs_2, str_idx_2 = find_smooth_subsequence(pitch[p:],base_tor=2, bias=p)
+    strs_1, str_idx_1 = find_smooth_subsequence(pitch[p_bias:p],bias=p_bias)
+    strs_2, str_idx_2 = find_smooth_subsequence(pitch[p:],bias=p)
     l1,l2 = str_idx_1[1] - str_idx_1[0], str_idx_2[1] - str_idx_2[0]
     print(str_idx_1,str_idx_2)
     feat = slope(strs_1), slope(strs_2), peakshift(amp1, amp2), np.std(pitch[:p]), np.std(pitch[p:])
     print(feat)
-    plot_frame(pitch, where='212',show=True)
+    #plot_frame(pitch, where='212',show=True)
     return feat
 
 def slope(seq):
     x = np.arange(0, len(seq))
     z = np.polyfit(x, seq, 1)
     return z[0]
+
+def poly_params(seq):
+    x = np.arange(0, len(seq))
+    z = np.polyfit(x, seq, 2)
+    return z[0], z[1]
 
 def peakshift(seq1, seq2):
     return np.max(seq2) - np.max(seq1)
@@ -65,7 +70,7 @@ def sub_endpoint_detect(frames):
         if s > max_score:
             max_score = s
             p = i
-    plot_frame(amp, where='211',sep=[p])
+    #plot_frame(amp, where='211',sep=[p])
     if p == 0:
         return len(amp) // 2
     return p
@@ -75,7 +80,7 @@ def pitch_detect(sig, rate, winlen=0.0512, step=0.01, gender='male'):
     frames = to_frames(sig, 10000, winlen, step)
     log_sigs = []
     for frame in frames:
-        frame = center_clip(frame)
+        frame = center_clip(frame, False)
         log_sig = pitch_detect_frame(frame, 10000, gender)
         log_sigs.append(log_sig)
     log_sigs = smooth(log_sigs)
@@ -91,9 +96,12 @@ def pitch_detect_sr(sig, rate, winlen=0.0512, step=0.01):
     frames = to_frames(sig, 10000, winlen, step)
     scores = []
     for frame in frames:
+        frame = center_clip(frame, False)
         score = pitch_detect_frame_sr(frame, 10000)
-        scores.append(peak_score(score))
-    pitch = max_pitch(scores, bias=0)
+        scores.append(score)
+    scores = smooth(scores, 2)
+    scores = [peak_score(score) for score in scores]
+    pitch = robust_max_pitch(scores, bias=20)
     return pitch, frames
     
 def pitch_detect_frame_sr(frame, rate):
@@ -107,14 +115,12 @@ def pitch_detect_frame_sr(frame, rate):
     each points gives 1e-4 resolution in time scope
     """
     def score(frame, n):
-        s = 0
-        for i in range(n, n + 300):
-            s += frame[i] * frame[i-n]
-        return s
+        arr1 = frame[:300]
+        arr2 = frame[n:300+n]
+        return np.sum(arr1 * arr2)
     frame = window(frame, rate, 50, 900, 'hamming')
     frame = np.abs(frame)
-    frame = center_clip(frame)
-    min_shift = 0
+    min_shift = 20
     max_shift = int(rate / 50)
     scores = []
     for n in range(min_shift, max_shift):
@@ -134,14 +140,14 @@ def pitch_detect_frame(frame, rate, gender):
     #plot_frame(np.abs(log_sig), where='212',show=True)
     return np.abs(log_sig)
 
-def center_clip(frame):
+def center_clip(frame, binary=True):
     med = np.median(frame[frame>=0])
     new_frame = []
     for i in range(len(frame)):
         if frame[i] > med:
-            new_frame.append(1)
+            new_frame.append(1 if binary else frame[i] - med)
         elif frame[i] < -med:
-            new_frame.append(-1)
+            new_frame.append(-1 if binary else frame[i] + med)
         else:
             new_frame.append(0)
     return np.array(new_frame)
@@ -163,8 +169,24 @@ def max_pitch(g, bias=20):
         pitch.append(p)
     return pitch
 
+def greedy_max_pitch(g, bias=20):
+    """
+    find the first peak all the time
+    :param g:
+    :param bias:
+    :return:
+    """
+    pitch = []
+    for l in g:
+        p = 0
+        for i in range(len(l)-1):
+            if l[i] > l[i+1]:
+                p = 1 / (0.0001 * (i+bias))
+                break
+        pitch.append(p)
+    return pitch
 
-def robust_max_pitch(g):
+def robust_max_pitch(g, bias=20):
     """
     more robust to half-frequency error
     :param g:
@@ -172,7 +194,7 @@ def robust_max_pitch(g):
     :return:
     """
     C = 50
-    pitch = max_pitch(g)
+    pitch = max_pitch(g, bias)
     for i in range(1,len(pitch)):
         if abs(2 * pitch[i] - pitch[i-1]) < C and pitch[i] < 170:
             pitch[i] = 2 * pitch[i]
@@ -218,7 +240,7 @@ def peak_score(sig, gender='male'):
     return l
 
 
-def find_smooth_subsequence(pitch, base_tor=3, base_thres=25, bias=0):
+def find_smooth_subsequence(pitch, base_tor=3, base_thres=30, bias=0):
     def main_func(tor=2, thres=50):
         i = 0
         strs = []
@@ -272,7 +294,7 @@ if __name__ == '__main__':
         reg = re.compile('(\d+)-(\d+)-(\d+).wav')
         audio = reg.match(filename).group(2)
         person = reg.match(filename).group(1)
-        if person.endswith('83'): continue
+        #if person.endswith('83'): continue
         #if not (person[3:7] == '0713' and int(person[7:]) < 300):
         #    continue
         if audio not in ['00', '01']:
@@ -291,6 +313,7 @@ if __name__ == '__main__':
 
 
     cnt = 0
+    p = []
     for idx, l, (sig, rate), label, filename in val_itr:
         reg = re.compile('(\d+)-(\d+)-(\d+).wav')
         audio = reg.match(filename).group(2)
@@ -305,9 +328,9 @@ if __name__ == '__main__':
         feature = pitch_feature(sig[l:r], rate)
         X_test.append(feature)
         labels_test.append(label)
+        p.append((feature[0], feature[2]))
         if cnt == 100:
             break
-
     fs = open('models/scale.pkl','wb')
     fc = open('models/rfc.pkl','wb')
 
@@ -325,6 +348,7 @@ if __name__ == '__main__':
     pickle.dump(scaler, fs)
 
     pred = clf.predict(X_test)
+    scatter(p, labels_test, '111', True)
     acc = accuracy_score(labels_test, pred)
     print(acc)
 
