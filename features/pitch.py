@@ -5,6 +5,9 @@ Date: 2018.05.24
 
 Pitch detection using cesptrum
 """
+import sys
+sys.path.insert(0, '../')
+
 import features
 import numpy as np
 from features.preprocess import preemphasis
@@ -35,9 +38,9 @@ def pitch_feature(sig, rate, gender='male'):
     amp1, amp2 = amp[p_bias:p], amp[p:]
     strs_1, str_idx_1 = find_smooth_subsequence(pitch[p_bias:p],bias=p_bias)
     strs_2, str_idx_2 = find_smooth_subsequence(pitch[p:],bias=p)
-    l1,l2 = str_idx_1[1] - str_idx_1[0], str_idx_2[1] - str_idx_2[0]
+    #l1,l2 = str_idx_1[1] - str_idx_1[0], str_idx_2[1] - str_idx_2[0]
     print(str_idx_1,str_idx_2)
-    feat = slope(strs_1), slope(strs_2), peakshift(amp1, amp2), np.std(pitch[:p]), np.std(pitch[p:])
+    feat = slope(strs_1), slope(strs_2),quad_params(strs_1), quad_params(strs_2)
     print(feat)
     #plot_frame(pitch, where='212',show=True)
     return feat
@@ -47,10 +50,10 @@ def slope(seq):
     z = np.polyfit(x, seq, 1)
     return z[0]
 
-def poly_params(seq):
+def quad_params(seq):
     x = np.arange(0, len(seq))
     z = np.polyfit(x, seq, 2)
-    return z[0], z[1]
+    return z[1] * z[1] - 4 * z[0] * z[2]
 
 def peakshift(seq1, seq2):
     return np.max(seq2) - np.max(seq1)
@@ -305,7 +308,7 @@ if __name__ == '__main__':
         #sig = preemphasis(sig, coeff=0.97)
         frames = to_frames(sig[l:r], rate)
         feature = pitch_feature(sig[l:r], rate)
-        p.append((feature[0],feature[2]))
+        p.append((feature[0],feature[-1]))
         X.append(feature)
         labels.append(label)
         if cnt == 100: break
@@ -328,7 +331,7 @@ if __name__ == '__main__':
         feature = pitch_feature(sig[l:r], rate)
         X_test.append(feature)
         labels_test.append(label)
-        p.append((feature[0], feature[2]))
+        p.append((feature[0], feature[-1]))
         if cnt == 100:
             break
     fs = open('models/scale.pkl','wb')

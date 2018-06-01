@@ -2,11 +2,10 @@ import numpy as np
 from features import mfcc, delta, to_frames
 from config import *
 from reader import Reader
-from sklearn.linear_model import SGDClassifier
+import features
 from sklearn.preprocessing import robust_scale, scale
 from sklearn.metrics import accuracy_score, confusion_matrix
 import pickle
-from features.preprocess import downsampling
 from rnn_clf import RNN, HRNN, cuda_, Transformer, CNN_SP, HRNN_Att, HMRNN
 import torch
 from torch.autograd import Variable
@@ -16,6 +15,11 @@ import plotter
 import re
 import argparse
 import random
+
+
+def cvar(arr):
+    v = cuda_(Variable(torch.from_numpy(arr).float()))
+    return v
 
 class _ModelBase:
     def __init__(self):
@@ -37,20 +41,19 @@ class _ModelBase:
     def pad2(self, b, shape):
         return np.pad(b,shape,'constant',constant_values=0)
 
-    def pad_batch(self, mfcc0, mfcc1, mfcc2):
+    def pad_batch(self, feat):
         #max_len = max([len(_) for _ in mfcc0])
         max_len = 200
-        l0,l1,l2 = [],[],[]
-        for b0, b1, b2 in zip(mfcc0, mfcc1, mfcc2):
-            l0.append(self.pad(b0, ((0, max_len - len(b0)),(0,0))))
-            l1.append(self.pad(b1, ((0, max_len - len(b1)), (0, 0))))
-            l2.append(self.pad(b2, ((0, max_len - len(b2)), (0, 0))))
-        return np.array(l0), np.array(l1), np.array(l2)
+        r = []
+        for b in feat:
+            r.append(self.pad(b, ((0, max_len - len(b)),(0,0))))
+        return np.array(r)
 
 
     def feature_extract_mfcc(self, sig, rate, filename, augment=False):
         """
         extract every features for training
+        - frequency space: MFCC. pitch
         :return: 
         """
         reg = re.compile('(\d+)-(\d+)-(\d+).wav')
@@ -68,7 +71,7 @@ class _ModelBase:
         sound = sig[left:right].reshape(-1, 1)
         sound = scale(sound, with_mean=False)
         #plotter.plot_frame(sound, show=True)
-        #mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=512, winfunc=np.hamming)
+
         mfcc0 = mfcc(sound, rate, winlen=cfg.frame, winstep=cfg.step, nfft=1536, winfunc=np.hamming)
         mfcc0 = mfcc0 - np.mean(mfcc0)
         mfcc1 = self.deviation(mfcc0,2)
@@ -76,7 +79,14 @@ class _ModelBase:
         mfcc0 = delta(mfcc0,3)
         mfcc1 = delta(mfcc1,3)
         mfcc2 = delta(mfcc2,3)
-        # mean normalize
+
+        PITCH_SCALE = 150
+
+        pitch0, _ = features.pitch_detect_sr(sig, rate, winlen=cfg.frame, step=cfg.step) / PITCH_SCALE
+        pitch1 = self.deviation(pitch0)
+        amp0 = scale(features.amplitude_feature(sig, rate, winlen=cfg.frame, step=cfg.step))
+        amp1 = self.deviation(amp0)
+
 
         '''
         if audio in ['01','00']:
@@ -86,7 +96,9 @@ class _ModelBase:
             plotter.plot_mfcc(mfcc2,'313')
             plotter.show()
         '''
-        return mfcc0, mfcc1, mfcc2, min(len(mfcc0),200), min(len(mfcc1),200), min(len(mfcc2),200)
+        return mfcc0, mfcc1, mfcc2, min(len(mfcc0),200), min(len(mfcc1),200), min(len(mfcc2),200),\
+                [pitch0], [pitch1], [amp0], [amp1]
+
 
     def load(self):
         state_dict = torch.load(cfg.model_path)
@@ -109,14 +121,16 @@ class RNNModel(_ModelBase):
             optim.zero_grad()
             features = [self.feature_extract_mfcc(a,b,filename,augment=True) for (a,b),filename in zip(feat,files)]
             features = [_ for _ in zip(*features)]
-            features[0], features[1], features[2] = self.pad_batch(features[0], features[1], features[2])
-            features[3], features[4], features[5] = np.array(features[3]), np.array(features[4]), np.array(features[5])
-            mfcc0, mfcc1, mfcc2 = cuda_(Variable(torch.from_numpy(features[0]).float())), \
-                                  cuda_(Variable(torch.from_numpy(features[1]).float())),\
-                                 cuda_(Variable(torch.from_numpy(features[2]).float()))
-            mfcc0, mfcc1, mfcc2 = mfcc0.transpose(0,1), mfcc1.transpose(0,1), mfcc2.transpose(0,1)
+            features[0], features[1], features[2] = self.pad_batch(features[0]), self.pad_batch(features[1]), self.pad_batch(features[2])
+            len0, len1, len2 = np.array(features[3]), np.array(features[4]), np.array(features[5])
+            features[6], features[7], features[8], features[9] = self.pad_batch(features[6]), self.pad_batch(features[7]), \
+                                                                 self.pad_batch(features[8]), self.pad_batch(features[9])
+
+            mfcc0, mfcc1, mfcc2, pitch0, pitch1, amp0, amp1 = tuple([cvar(features[_]).transpose(0,1)
+                                                                     for _ in [0,1,2,6,7,8,9]])
+
             label = cuda_(Variable(torch.LongTensor(label)))
-            out = self.clf(mfcc0, mfcc1, mfcc2, features[3])
+            out = self.clf(mfcc0, mfcc1, mfcc2, features[3], len0, pitch0, pitch1, amp0, amp1)
             loss = criterion(out, label)
             loss.backward()
             optim.step()
@@ -127,18 +141,20 @@ class RNNModel(_ModelBase):
     def test_iter(self, itr, total_iter, feat, label, files):
         features = [self.feature_extract_mfcc(a, b, filename) for (a, b), filename in zip(feat, files)]
         features = [_ for _ in zip(*features)]
-        features[0], features[1], features[2] = self.pad_batch(features[0], features[1], features[2])
-        features[3], features[4], features[5] = np.array(features[3]), np.array(features[4]), np.array(features[5])
-        mfcc0, mfcc1, mfcc2 = cuda_(Variable(torch.from_numpy(features[0]).float())), \
-                              cuda_(Variable(torch.from_numpy(features[1]).float())), \
-                              cuda_(Variable(torch.from_numpy(features[2]).float()))
-        mfcc0, mfcc1, mfcc2 = mfcc0.transpose(0, 1), mfcc1.transpose(0, 1), mfcc2.transpose(0, 1)
-        out = self.clf(mfcc0, mfcc1, mfcc2, features[3])
-        out = F.softmax(out, dim=1)
-        prob, pred_ = torch.max(out, 1)
+        features[0], features[1], features[2] = self.pad_batch(features[0]), self.pad_batch(
+            features[1]), self.pad_batch(features[2])
+        len0, len1, len2 = np.array(features[3]), np.array(features[4]), np.array(features[5])
+        features[6], features[7], features[8], features[9] = self.pad_batch(features[6]), self.pad_batch(features[7]), \
+                                                             self.pad_batch(features[8]), self.pad_batch(features[9])
+
+        mfcc0, mfcc1, mfcc2, pitch0, pitch1, amp0, amp1 = tuple([cvar(features[_]).transpose(0, 1)
+                                                                 for _ in [0, 1, 2, 6, 7, 8, 9]])
+        out = self.clf(mfcc0, mfcc1, mfcc2, features[3], len0, pitch0, pitch1, amp0, amp1)
+        prob_ = F.softmax(out, dim=1)
+        pred_ = torch.max(out, 1)
         pred_ = pred_.data.cpu().numpy().tolist()
-        prob = prob.data.cpu().numpy().tolist()
-        return pred_, prob
+        prob_ = prob_.data.cpu().numpy().tolist()
+        return pred_, prob_
 
     def test(self):
         dev_data = self.reader.mini_batch_iterator(self.reader.val_person)

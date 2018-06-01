@@ -19,7 +19,7 @@ def basic_endpoint_detection(sig, rate, return_feature=False):
     :return: 
     """
     frames = to_frames(sig, rate, t=cfg.frame, step=cfg.step)
-    amp = get_amplitude(frames, 'dirc')
+    amp = get_amplitude(frames)
     sep_point = amplitude_rule(amp)
     left, right = sep_point[0][0], sep_point[-1][1]
     if right - left < 50: # too short, 0.5 sec
@@ -46,7 +46,7 @@ def basic_endpoint_detection(sig, rate, return_feature=False):
     else:
         return int(left2 * cfg.step * rate),  int(right2 * cfg.step * rate), amp, zcr
 
-def get_amplitude(frames, window='dirc', use_sq=False):
+def get_amplitude(frames, window='square', use_sq=False):
     """
     calculate convolution between |x| or x(n)^2 and the window
     :param use_sq: use x^2 instead of x
@@ -55,7 +55,7 @@ def get_amplitude(frames, window='dirc', use_sq=False):
     """
     energy = []
     l = frames[0].shape[-1]
-    if window == 'dirc':
+    if window == 'square':
         window = np.ones(1)
     elif window == 'hamming':
         window = np.hamming(l)
@@ -65,6 +65,10 @@ def get_amplitude(frames, window='dirc', use_sq=False):
     energy = [np.mean(_) for _ in energy]
     return energy
 
+def amplitude_feature(sig, rate, winlen, step):
+    frames = to_frames(sig, rate, winlen, step)
+    amp = get_amplitude(frames)
+    return amp
 
 def amplitude_rule(amp, mh=0.25, th=0.100, l_sil=0.100, r_sil=0.100, sigma=3):
     """

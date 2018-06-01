@@ -48,12 +48,12 @@ class HRNN(nn.Module):
         self.enc2 = DynamicEncoder(200, 200, n_layers=1, dropout=0.0, bidir=True)
         self.out = nn.Linear(400, 20)
 
-    def forward(self, mfcc0, mfcc1, mfcc2, len0, return_feature=False):
+    def forward(self, mfcc0, mfcc1, mfcc2, len0, pitch0, pitch1, amp0, amp1, return_feature=False):
         len1 = [(_+self.hir-1) // self.hir for _ in len0]
         len1 = np.array(len1)
         len0_v = cuda_(Variable(torch.from_numpy(len0).float()))
         len1_v = cuda_(Variable(torch.from_numpy(len1).float()))
-        enc_out, hidden = self.enc1(torch.cat([mfcc0, mfcc1, mfcc2], dim=2), len0)
+        enc_out, hidden = self.enc1(torch.cat([mfcc0, mfcc1, mfcc2, pitch0, pitch1, amp0, amp1], dim=2), len0)
 
         enc_out = enc_out[:,:,-self.hidden_size:]
         #hidden =  hidden[-2:,:,:]
