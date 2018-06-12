@@ -5,3 +5,4 @@ models/
 img*/
 log/
 *.zip
+.vscode/

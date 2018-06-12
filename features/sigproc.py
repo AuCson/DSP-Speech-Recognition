@@ -22,8 +22,6 @@ def to_frames(sig, rate, t=0.020, step=0.010):
 def window(sig, rate, low_freq=0, high_freq=500, wintype='square'):
     """
     add a window to the signal.
-    low-pass filter
-    do not care about phase
     :param winlen: in sec
     :param nfft: 
     :param sig: [N]
@@ -46,6 +44,13 @@ def window(sig, rate, low_freq=0, high_freq=500, wintype='square'):
     h_w = 2 * np.pi * w * hd_w
     sig = np.convolve(sig, h_w)[:N]
     return sig
+
+def acr(frame, n):
+    if n == 0:
+        return np.sum(frame * frame)# / len(frame)
+    arr1 = frame[:-n]
+    arr2 = frame[n:]
+    return np.sum(arr1 * arr2) #/ (len(frame) - n)
 
 def round_half_up(number):
     return int(decimal.Decimal(number).quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_UP))

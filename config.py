@@ -35,6 +35,9 @@ class Config:
         self.cuda_device = 0
         self.lr = 0.001
 
+        self.use_pitch = False
+        self.use_timefeat = False
+
     def init_logging_handler(self):
         current_time = time.strftime("%m-%d-%H-%M-%S", time.localtime())
         if not os.path.isdir('./log/'):

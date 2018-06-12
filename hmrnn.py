@@ -57,11 +57,11 @@ class HM_LSTMCell(Module):
         U_21 means the state transition parameters from layer l+1 (top layer) to layer l
         W_01 means the state transition parameters from layer l-1 (bottom layer) to layer l
         '''
-        self.U_11 = Parameter(torch.cuda.FloatTensor(4 * self.hidden_size + 1, self.hidden_size))
+        self.U_11 = Parameter(torch.FloatTensor(4 * self.hidden_size + 1, self.hidden_size))
         if not self.last_layer:
-            self.U_21 = Parameter(torch.cuda.FloatTensor(4 * self.hidden_size + 1, self.top_size))
-        self.W_01 = Parameter(torch.cuda.FloatTensor(4 * self.hidden_size + 1, self.bottom_size))
-        self.bias = Parameter(torch.cuda.FloatTensor(4 * self.hidden_size + 1))
+            self.U_21 = Parameter(torch.FloatTensor(4 * self.hidden_size + 1, self.top_size))
+        self.W_01 = Parameter(torch.FloatTensor(4 * self.hidden_size + 1, self.bottom_size))
+        self.bias = Parameter(torch.FloatTensor(4 * self.hidden_size + 1))
 
         self.reset_parameters()
 
@@ -77,7 +77,7 @@ class HM_LSTMCell(Module):
             s_topdown_ = torch.mm(self.U_21, h_top)
             s_topdown = z.expand_as(s_topdown_) * s_topdown_
         else:
-            s_topdown = Variable(torch.zeros(s_recur.size()).cuda(), requires_grad=False).cuda()
+            s_topdown = cuda_(Variable(torch.zeros(s_recur.size()), requires_grad=False))
         s_bottomup_ = torch.mm(self.U_11, h)
         s_bottomup = z_bottom.expand_as(s_bottomup_) * s_bottomup_
 
@@ -89,7 +89,7 @@ class HM_LSTMCell(Module):
         g = Func.tanh(f_s[self.hidden_size*3:self.hidden_size*4, :])
         z_hat = hard_sigm(self.a, f_s[self.hidden_size*4:self.hidden_size*4+1, :])
 
-        one = Variable(torch.ones(f.size()).cuda(), requires_grad=False)
+        one = cuda_(Variable(torch.ones(f.size()), requires_grad=False))
         z = z.expand_as(f)
         z_bottom = z_bottom.expand_as(f)
 
@@ -128,15 +128,15 @@ class HM_LSTM(Module):
         batch_size = inputs.size(0)
 
         if hidden is None:
-            h_t1 = Variable(torch.zeros(self.size_list[0], batch_size).float().cuda(), requires_grad=False)
-            c_t1 = Variable(torch.zeros(self.size_list[0], batch_size).float().cuda(), requires_grad=False)
-            z_t1 = Variable(torch.zeros(1, batch_size).float().cuda(), requires_grad=False)
-            h_t2 = Variable(torch.zeros(self.size_list[1], batch_size).float().cuda(), requires_grad=False)
-            c_t2 = Variable(torch.zeros(self.size_list[1], batch_size).float().cuda(), requires_grad=False)
-            z_t2 = Variable(torch.zeros(1, batch_size).float().cuda(), requires_grad=False)
+            h_t1 = cuda_(Variable(torch.zeros(self.size_list[0], batch_size).float(), requires_grad=False))
+            c_t1 = cuda_(Variable(torch.zeros(self.size_list[0], batch_size).float(), requires_grad=False))
+            z_t1 = cuda_(Variable(torch.zeros(1, batch_size).float(), requires_grad=False))
+            h_t2 = cuda_(Variable(torch.zeros(self.size_list[1], batch_size).float(), requires_grad=False))
+            c_t2 = cuda_(Variable(torch.zeros(self.size_list[1], batch_size).float(), requires_grad=False))
+            z_t2 = cuda_(Variable(torch.zeros(1, batch_size).float(), requires_grad=False))
         else:
             (h_t1, c_t1, z_t1, h_t2, c_t2, z_t2) = hidden
-        z_one = Variable(torch.ones(1, batch_size).float().cuda(), requires_grad=False)
+        z_one = cuda_(Variable(torch.ones(1, batch_size).float(), requires_grad=False))
 
         h_1 = []
         h_2 = []

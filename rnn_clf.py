@@ -6,7 +6,6 @@ import numpy as np
 from config import cfg
 from transformer import TransformerEncoder
 from collections import OrderedDict
-from resnet import resnet18
 from layers import *
 from hmrnn import HM_LSTM
 
@@ -40,20 +39,20 @@ class HRNN(nn.Module):
     Level 1: 10ms stride
     Lelel 2: 50ms stride, that is 5 step
     """
-    def __init__(self):
+    def __init__(self, feat_size=39):
         super().__init__()
         self.hir = 5
         self.hidden_size = 200
-        self.enc1 = DynamicEncoder(39, 200, n_layers=2, dropout=0.2, bidir=True)
+        self.enc1 = DynamicEncoder(feat_size, 200, n_layers=2, dropout=0.2, bidir=True)
         self.enc2 = DynamicEncoder(200, 200, n_layers=1, dropout=0.0, bidir=True)
         self.out = nn.Linear(400, 20)
 
-    def forward(self, mfcc0, mfcc1, mfcc2, len0, pitch0, pitch1, amp0, amp1, return_feature=False):
+    def forward(self, inp, len0, return_feature=False):
         len1 = [(_+self.hir-1) // self.hir for _ in len0]
         len1 = np.array(len1)
         len0_v = cuda_(Variable(torch.from_numpy(len0).float()))
         len1_v = cuda_(Variable(torch.from_numpy(len1).float()))
-        enc_out, hidden = self.enc1(torch.cat([mfcc0, mfcc1, mfcc2, pitch0, pitch1, amp0, amp1], dim=2), len0)
+        enc_out, hidden = self.enc1(inp, len0)
 
         enc_out = enc_out[:,:,-self.hidden_size:]
         #hidden =  hidden[-2:,:,:]
@@ -81,21 +80,21 @@ class HRNN_Att(HRNN):
     Level 1: 10ms stride
     Lelel 2: 50ms stride, that is 5 step
     """
-    def __init__(self):
+    def __init__(self,feat_size=39):
         super().__init__()
         self.hir = 5
         self.hidden_size = 200
-        self.enc1 = DynamicEncoder(39, 200, n_layers=2, dropout=0.2, bidir=True)
+        self.enc1 = DynamicEncoder(feat_size, 200, n_layers=2, dropout=0.2, bidir=True)
         self.enc2 = DynamicEncoder(200, 200, n_layers=1, dropout=0.0, bidir=True)
         self.attn = SelfAttn(200)
-        self.out = nn.Linear(600, 20)
+        self.out = nn.Linear(400, 20)
 
-    def forward(self, mfcc0, mfcc1, mfcc2, len0, return_feature=False):
+    def forward(self, inp, len0, return_feature=False):
         len1 = [(_+self.hir-1) // self.hir for _ in len0]
         len1 = np.array(len1)
         len0_v = cuda_(Variable(torch.from_numpy(len0).float()))
         len1_v = cuda_(Variable(torch.from_numpy(len1).float()))
-        enc_out, hidden = self.enc1(torch.cat([mfcc0, mfcc1, mfcc2], dim=2), len0)
+        enc_out, hidden = self.enc1(inp, len0)
 
         enc_out = enc_out[:,:,-self.hidden_size:]
         #hidden =  hidden[-2:,:,:]
@@ -108,11 +107,11 @@ class HRNN_Att(HRNN):
 
         sum_enc_out = enc_out2.sum(0)
 
-        attn = self.attn(enc_out)
+        attn = self.attn(enc_out2)
 
         avg_pool = sum_enc_out / len1_v.unsqueeze(1)
         max_pool, _ = torch.max(enc_out2, 0)
-        feat = torch.cat([avg_pool, max_pool, attn], dim=1)
+        feat = torch.cat([attn, max_pool], dim=1)
         out = self.out(feat)
         out = F.dropout(out, 0.2)
         if not return_feature:
@@ -121,31 +120,31 @@ class HRNN_Att(HRNN):
             return out, feat
 
 class HMRNN(nn.Module):
-    def __init__(self):
+    def __init__(self, feat_size):
         super().__init__()
         self.hir = 5
         self.hidden_size = 200
-        self.enc1 = DynamicEncoder(39, 200, n_layers=2, dropout=0.2, bidir=True)
+        self.enc1 = DynamicEncoder(feat_size, 200, n_layers=1, dropout=0.0, bidir=True)
         self.enc2 = HM_LSTM(1.0, 200, [200,200])
-        self.out = nn.Linear(400, 20)
+        self.out = nn.Linear(600, 20)
 
-    def forward(self, mfcc0, mfcc1, mfcc2, len0, return_feature=False):
+    def forward(self, inp, len0, return_feature=False):
         len1 = [(_+self.hir-1) // self.hir for _ in len0]
         len1 = np.array(len1)
         len0_v = cuda_(Variable(torch.from_numpy(len0).float()))
         len1_v = cuda_(Variable(torch.from_numpy(len1).float()))
 
-        enc_out, hidden = self.enc1(torch.cat([mfcc0, mfcc1, mfcc2], dim=2), len0)
-
-        h_1, h_2, z_1, z_2, hidden = self.enc2(enc_out, None) # [B,T,G]
-
-        mask = self.mask(len0, h_2.size(1)).unsqueeze(2) # [B,T,1]
-        enc_out2 = h_2 * mask
-        enc_out2 = enc_out2.transpose(0,1)
-        sum_enc_out = enc_out2.sum(0)
+        enc_out, hidden = self.enc1(inp, len0)
+        enc_out = F.dropout(enc_out, 0.2)
+        h_1, h_2, z_1, z_2, hidden = self.enc2(enc_out, None) # [B,T,H]
+        hiddens = []
+        for i in range(h_2.size(0)):
+            hiddens.append(h_2[i,len0[i]-1])
+        hiddens = torch.stack(hiddens) # [B,H]
+        sum_enc_out = h_2.sum(0)
         avg_pool = sum_enc_out / len0_v.unsqueeze(1)
-        max_pool, _ = torch.max(enc_out, 0)
-        feat = torch.cat([avg_pool, max_pool], dim=1)
+        max_pool, _ = torch.max(h_2, 0)
+        feat = torch.cat([avg_pool, max_pool, hiddens], dim=1)
         out = self.out(feat)
         out = F.dropout(out, 0.2)
         if not return_feature:
@@ -161,6 +160,9 @@ class HMRNN(nn.Module):
         mask = cuda_(Variable(torch.from_numpy(mask).float()))
         return mask
 
+    def adjust_param(self):
+        self.enc2.a += 0.5
+
 class Transformer(nn.Module):
     def __init__(self):
         super().__init__()
@@ -172,12 +174,11 @@ class Transformer(nn.Module):
         self.out = nn.Linear(400,20)
         self.hidden_size = 200
 
-    def forward(self, mfcc0, mfcc1, mfcc2, len0, return_feature=False):
+    def forward(self, inp, len0, return_feature=False):
         len1 = [(_ + self.hir - 1) // self.hir for _ in len0]
         len1 = np.array(len1)
         len0_v = cuda_(Variable(torch.from_numpy(len0).float()))
         len1_v = cuda_(Variable(torch.from_numpy(len1).float()))
-        inp = torch.cat([mfcc0, mfcc1, mfcc2],dim=2)
         attn_out,_ = self.attn_enc(inp)
         attn_out = F.dropout(attn_out, 0.5)
         enc_out, hidden = self.rnn_enc_1(torch.cat([inp, attn_out], 2), len0)
@@ -200,15 +201,3 @@ class Transformer(nn.Module):
             return out
         else:
             return out, feat
-
-
-class CNN_SP(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.resnet = resnet18(pretrained=False, num_classes=20)
-
-    def forward(self, mfcc0, mfcc1, mfcc2, len0):
-        inp = torch.cat([mfcc0, mfcc1, mfcc2], dim=2) # [T,B,H]
-        inp = inp.transpose(0,1).unsqueeze(1)
-        out = self.resnet(inp)
-        return out

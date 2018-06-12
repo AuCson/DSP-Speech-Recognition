@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
 from config import cfg
+import math
 
 def cuda_(var):
     return var.cuda() if cfg.cuda else var
@@ -92,6 +93,34 @@ class SelfAttn(nn.Module):
         energy = self.attn(encoder_outputs) # [B,T,H]
         energy = self.v(F.tanh(energy))  # [B,T,1]
         return F.softmax(energy.squeeze(2),1)  # [B*T]
+
+class Attn(nn.Module):
+    """
+    compute attention vector (1 layer)
+    """
+    def __init__(self, hidden_size):
+        super(Attn, self).__init__()
+        self.hidden_size = hidden_size
+        self.attn = nn.Linear(self.hidden_size * 2, hidden_size)
+        self.v = nn.Parameter(torch.zeros(hidden_size))
+        stdv = 1. / math.sqrt(self.v.size(0))
+        self.v.data.normal_(mean=0, std=stdv)
+
+    def forward(self, hidden, encoder_outputs, normalize=True):
+        encoder_outputs = encoder_outputs.transpose(0, 1)  # [B,T,H]
+        attn_energies = self.score(hidden, encoder_outputs)
+        normalized_energy = F.softmax(attn_energies, dim=2)  # [B,1,T]
+        context = torch.bmm(normalized_energy, encoder_outputs)  # [B,1,H]
+        return context.transpose(0, 1)  # [1,B,H]
+
+    def score(self, hidden, encoder_outputs):
+        max_len = encoder_outputs.size(1)
+        H = hidden.repeat(max_len, 1, 1).transpose(0, 1)
+        energy = F.tanh(self.attn(torch.cat([H, encoder_outputs], 2)))  # [B,T,2H]->[B,T,H]
+        energy = energy.transpose(2, 1)  # [B,H,T]
+        v = self.v.repeat(encoder_outputs.size(0), 1).unsqueeze(1)  # [B,1,H]
+        energy = torch.bmm(v, energy)  # [B,1,T]
+        return energy
 
 class LayerNormalization(nn.Module):
     ''' Layer normalization module '''
