@@ -43,7 +43,7 @@ class _ModelBase:
 
     def pad_batch(self, feat):
         #max_len = max([len(_) for _ in mfcc0])
-        max_len = 200
+        max_len = 210
         r = []
         for b in feat:
             r.append(self.pad(b, ((0, max_len - len(b)),(0,0))))
@@ -73,11 +73,9 @@ class _ModelBase:
         #plotter.plot_frame(sound, show=True)
         mfcc0 = mfcc(sound.reshape(1,-1), rate, winlen=cfg.frame, winstep=cfg.step, nfft=1536, winfunc=np.hamming)
         mfcc0 = mfcc0 - np.mean(mfcc0)
-        #mfcc1 = self.deviation(mfcc0,2)
-        #mfcc2 = self.deviation(mfcc1,2)
-        #mfcc0 = delta(mfcc0,3)
-        mfcc1 = delta(mfcc0,2)
-        mfcc2 = delta(mfcc1,2)
+        mfcc1 = delta(mfcc0,3)
+        mfcc2 = delta(mfcc1,3)
+        mfcc0 = scale(mfcc0)
 
         '''
         if audio in ['01','00']:

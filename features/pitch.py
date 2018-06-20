@@ -14,7 +14,7 @@ from features.preprocess import preemphasis
 from features.sigproc import to_frames, window, acr
 from reader import Reader
 from plotter import plot_frame, show, scatter
-from features.endpoint import basic_endpoint_detection, get_amplitude
+from features.endpoint import basic_endpoint_detection, get_amplitude, robust_endpoint_detection
 import re
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.svm import SVC
@@ -40,9 +40,10 @@ def pitch_feature(sig, rate, gender='male'):
     strs_2, str_idx_2 = find_smooth_subsequence(pitch[p:],bias=p)
     #l1,l2 = str_idx_1[1] - str_idx_1[0], str_idx_2[1] - str_idx_2[0]
     print(str_idx_1,str_idx_2)
-    feat = slope(strs_1), slope(strs_2)
+
+    feat = slope(strs_1), slope(strs_2), quad_params(strs_1), quad_params(strs_2), peakshift(strs_1, strs_2)
     print(feat)
-    plot_frame(pitch, where='212',show=True)
+    #plot_frame(pitch, where='212',show=True)
     return feat
 
 def slope(seq):
@@ -53,7 +54,7 @@ def slope(seq):
 def quad_params(seq):
     x = np.arange(0, len(seq))
     z = np.polyfit(x, seq, 2)
-    return z[1] * z[1] - 4 * z[0] * z[2]
+    return z[0]
 
 def peakshift(seq1, seq2):
     return np.max(seq2) - np.max(seq1)
@@ -104,7 +105,7 @@ def pitch_detect_sr(sig, rate, winlen=0.0512, step=0.01):
         scores.append(score)
     scores = smooth(scores, 2)
     #scores = [peak_score(score) for score in scores]
-    pitch = max_pitch(scores, bias=20)
+    pitch = robust_max_pitch(scores, bias=20)
     return pitch, frames
     
 def pitch_detect_frame_sr(frame, rate):
@@ -294,22 +295,22 @@ if __name__ == '__main__':
         reg = re.compile('(\d+)-(\d+)-(\d+).wav')
         audio = reg.match(filename).group(2)
         person = reg.match(filename).group(1)
-        #if person.endswith('83'): continue
+        #if person.endswith('083') or person.endswith('079'): continue
         #if not (person[3:7] == '0713' and int(person[7:]) < 300):
         #    continue
-        #if audio not in ['00', '01']:
-        #    continue
+        if audio not in ['06', '07']:
+            continue
         print(person, label, filename)
         cnt += 1
         l, r = basic_endpoint_detection(sig, rate)
         #l,r= 0,len(sig)
-        #sig = preemphasis(sig, coeff=0.97)
+        sig = preemphasis(sig, coeff=0.97)
         frames = to_frames(sig[l:r], rate)
         feature = pitch_feature(sig[l:r], rate)
         p.append((feature[0],feature[-1]))
         X.append(feature)
         labels.append(label)
-        if cnt == 100: break
+        if cnt == 200: break
     scatter(p,labels,'111',True)
 
 
@@ -319,12 +320,12 @@ if __name__ == '__main__':
         reg = re.compile('(\d+)-(\d+)-(\d+).wav')
         audio = reg.match(filename).group(2)
         person = reg.match(filename).group(1)
-        if audio not in ['00','01']:
+        if audio not in ['06','07']:
             continue
         print(person,label,filename)
         cnt += 1
         l ,r = basic_endpoint_detection(sig, rate)
-        #sig = preemphasis(sig, coeff=0.97)
+        sig = preemphasis(sig, coeff=0.97)
         frames = to_frames(sig[l:r], rate)
         feature = pitch_feature(sig[l:r], rate)
         X_test.append(feature)

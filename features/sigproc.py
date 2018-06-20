@@ -47,10 +47,10 @@ def window(sig, rate, low_freq=0, high_freq=500, wintype='square'):
 
 def acr(frame, n):
     if n == 0:
-        return np.sum(frame * frame)# / len(frame)
+        return np.sum(frame * frame) / len(frame)
     arr1 = frame[:-n]
     arr2 = frame[n:]
-    return np.sum(arr1 * arr2) #/ (len(frame) - n)
+    return np.sum(arr1 * arr2) / (len(frame) - n)
 
 def round_half_up(number):
     return int(decimal.Decimal(number).quantize(decimal.Decimal('1'), rounding=decimal.ROUND_HALF_UP))

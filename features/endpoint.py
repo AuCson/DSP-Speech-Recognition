@@ -55,7 +55,7 @@ def basic_endpoint_detection(sig, rate, return_feature=False):
     zcr = get_zcr(frames)
     left2, right2 = zcr_rule(zcr, left, right)
     #plot_frame(zcr, where='313')
-    #plot_frame(amp, where='312', sep=[left,right,left2,right2],show=True)
+    #plot_frame(amp, where='111', sep=[left,right,left2,right2],show=True)
 
     if right2 - left2 < 50:
         left2 = 0
@@ -68,7 +68,7 @@ def basic_endpoint_detection(sig, rate, return_feature=False):
 def robust_endpoint_detection(sig, rate):
     # filter: 50 - 900 Hz
 
-    frames = to_frames(sig, rate, t=0.040, step=cfg.step)
+    frames = to_frames(sig, rate, cfg.frame, step=cfg.step)
     amp = get_amplitude(frames)
     sep_point = amplitude_rule(amp, 0.5, frames=frames, use_acr=True, rate=rate)
     left, right = sep_point[0][0], sep_point[-1][1]
@@ -84,7 +84,7 @@ def robust_endpoint_detection(sig, rate):
     zcr = get_zcr(frames)
     left2, right2 = zcr_rule(zcr, left, right)
     #plot_frame(zcr, where='313')
-    plot_frame(amp, where='312', sep=[left, right, left2, right2], show=True)
+    #plot_frame(amp, where='111', sep=[left, right, left2, right2], show=True)
 
     if right2 - left2 < 50:
         left2 = 0
@@ -140,13 +140,11 @@ def amplitude_rule(amp, mh=0.25, th=0.100, l_sil=0.100, r_sil=0.100, sigma=3, us
     """
 
     def acr_rule(frame):
-        frame = center_clip(frame, binary=False)
-        frame = window(frame, rate, low_freq=50, high_freq=900, wintype='hamming')
-        frame = np.abs(frame)
+        acrs = [acr(frame,n) for n in range(rate//500, rate//50)]
+        return max(acrs) / acr(frame,0) > 0.55
 
-        acrs = [acr(frame, _) for _ in range(int(rate/500), int(rate/50))]
-        pitch = max_pitch(acrs, rate)
-        return pitch <= 500 and pitch >= 50
+    #pitch = [acr_rule(frame) for frame in frames]
+    #plot_frame(pitch, where='211', show=False)
 
     p = []
     # assume first and ast 100ms is silience
@@ -171,8 +169,8 @@ def amplitude_rule(amp, mh=0.25, th=0.100, l_sil=0.100, r_sil=0.100, sigma=3, us
                     j -= 1
                 while k < len(amp) and amp[k] > M_L  and (not use_acr or acr_rule(frames[k])):
                     k += 1
-                if use_acr and j > 5:
-                    j -= 5
+                #if use_acr and j > 5:
+                #    j -= 5
                 p.append((j,k))
                 i = k
         i += 1

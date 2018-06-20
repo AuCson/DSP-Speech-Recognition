@@ -120,11 +120,11 @@ class HRNN_Att(HRNN):
             return out, feat
 
 class HMRNN(nn.Module):
-    def __init__(self, feat_size):
+    def __init__(self, feat_size=39):
         super().__init__()
         self.hir = 5
         self.hidden_size = 200
-        self.enc1 = DynamicEncoder(feat_size, 200, n_layers=1, dropout=0.0, bidir=True)
+        self.enc1 = DynamicEncoder(feat_size, 200, n_layers=2, dropout=0.0, bidir=True)
         self.enc2 = HM_LSTM(1.0, 200, [200,200])
         self.out = nn.Linear(600, 20)
 
@@ -141,9 +141,9 @@ class HMRNN(nn.Module):
         for i in range(h_2.size(0)):
             hiddens.append(h_2[i,len0[i]-1])
         hiddens = torch.stack(hiddens) # [B,H]
-        sum_enc_out = h_2.sum(0)
+        sum_enc_out = enc_out.sum(0) # [B,H]
         avg_pool = sum_enc_out / len0_v.unsqueeze(1)
-        max_pool, _ = torch.max(h_2, 0)
+        max_pool, _ = torch.max(enc_out, 0)
         feat = torch.cat([avg_pool, max_pool, hiddens], dim=1)
         out = self.out(feat)
         out = F.dropout(out, 0.2)

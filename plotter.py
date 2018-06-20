@@ -11,11 +11,11 @@ from matplotlib import cm
 
 PLT_CNT = 0
 
-def plot_frame(frames,frame_len=1,name='frames',where='111',show=False, sep=None):
-    x = np.arange(0, len(frames), frame_len)
+def plot_frame(frames,frame_len=1,name='frames',where='111',show=False, sep=None, bias=0):
+    x = np.arange(bias, len(frames)+bias, frame_len)
     plt.subplot(where)
     plt.title(name)
-    plt.plot(x, frames)
+    plt.plot(x, frames, c='orange')
     if sep:
         for c in sep:
             plt.axvline(c)
