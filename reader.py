@@ -4,6 +4,7 @@ import scipy.io.wavfile as wav
 from config import *
 import re
 import random
+import time
 
 class Reader:
     def __init__(self, data_dir='./', debug=False):
@@ -109,3 +110,19 @@ class Reader:
                 yield s, 1, feat[0],labels[0], file
             else:
                 yield s,1, feat[0],labels[0], file, speakers
+
+    def new_file_detect_iterator(self):
+        done = set()
+        l = os.listdir(cfg.monitor_dir)
+        done.update(l)
+        while True:
+            l = os.listdir(cfg.monitor_dir)
+            for item in l:
+                if item not in done:
+                    print('detected %s' % item)
+                    feat, labels, speakers = self.read_data([item])
+                    yield 0, 1, feat, labels, l
+                    done.add(item)
+            time.sleep(1)
+            
+

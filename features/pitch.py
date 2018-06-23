@@ -31,7 +31,7 @@ def pitch_feature(sig, rate, gender='male'):
     :return:
     """
 
-    pitch, frames = pitch_detect_sr(sig, rate)
+    pitch, frames = pitch_detect(sig, rate)
     p = sub_endpoint_detect(frames)
     p_bias = 5 if p > 15 else 0
     amp = scale(get_amplitude(frames))
@@ -57,8 +57,9 @@ def quad_params(seq):
     return z[0]
 
 def peakshift(seq1, seq2):
-    return np.max(seq2) - np.max(seq1)
-
+    a1 = np.median(seq2)
+    a2 = np.median(seq1)
+    return a1 - a2
 
 def sub_endpoint_detect(frames):
     amp = [np.abs(_).sum() for _ in frames]

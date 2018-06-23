@@ -30,7 +30,8 @@ class Config:
         self.val_person = 0.2
         self.frame = 0.03
         self.step = 0.01
-        self.model_path = 'models/transformer-scale.pkl'
+        self.model_path = 'models/hmrnn-0621.pkl'
+        self.monitor_dir = 'test/'
         self.init_logging_handler()
         self.cuda_device = 0
         self.lr = 0.001

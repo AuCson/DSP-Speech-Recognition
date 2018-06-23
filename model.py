@@ -107,7 +107,7 @@ class _ModelBase:
 class RNNModel(_ModelBase):
     def __init__(self):
         super().__init__()
-        self.clf = HRNN()
+        self.clf = HMRNN()
         #self.clf = CNN_SP()
         self.clf = cuda_(self.clf)
 
@@ -180,8 +180,9 @@ class RNNModel(_ModelBase):
         printer.info(acc)
         for e in err:
             printer.info(e)
-        #cm = confusion_matrix(y, pred)
-        #print(cm)
+        cm = confusion_matrix(y, pred)
+        pickle.dump(cm, open('cm.pkl','wb'))
+
         self.clf.train()
         return acc
 

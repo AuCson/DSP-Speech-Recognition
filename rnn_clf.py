@@ -16,21 +16,21 @@ class RNN(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        self.enc = DynamicEncoder(39,50,1,0.0)
-        self.out = nn.Linear(100,20)
+        self.enc = DynamicEncoder(39,200,3,0.0)
+        self.out = nn.Linear(400,20)
 
-    def forward(self, mfcc0, mfcc1, mfcc2, len0):
+    def forward(self, inp, len0):
         """
 
         :param mfcc: [T,B,H]
         :return:
         """
-        #len0_v = Variable(torch.FloatTensor(len0))
-        enc_out, hidden = self.enc(torch.cat([mfcc0, mfcc1, mfcc2], dim=2), len0) # [T,B,H]
+        len0_v = cuda_(Variable(torch.FloatTensor(len0)))
+        enc_out, hidden = self.enc(inp, len0) # [T,B,H]
         sum_enc_out = enc_out.sum(0)
-        #avg_pool = sum_enc_out / len0_v.unsqueeze(1)
-        #max_pool,_ = torch.max(enc_out,0)
-        out = self.out(torch.cat([hidden[0],hidden[1]], dim=1))
+        avg_pool = sum_enc_out / len0_v.unsqueeze(1)
+        max_pool,_ = torch.max(enc_out,0)
+        out = self.out(torch.cat([avg_pool, max_pool], dim=1))
         return out
 
 class HRNN(nn.Module):
@@ -41,7 +41,7 @@ class HRNN(nn.Module):
     """
     def __init__(self, feat_size=39):
         super().__init__()
-        self.hir = 5
+        self.hir = 10
         self.hidden_size = 200
         self.enc1 = DynamicEncoder(feat_size, 200, n_layers=2, dropout=0.2, bidir=True)
         self.enc2 = DynamicEncoder(200, 200, n_layers=1, dropout=0.0, bidir=True)
