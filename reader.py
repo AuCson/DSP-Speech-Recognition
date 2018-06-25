@@ -64,17 +64,18 @@ class Reader:
         print('random: %f', random.random())
         return train_files, val_person_files, val_inst_files
 
-    def read_data(self, files, read_speaker=False):
+    def read_data(self, files, read_speaker=False, interactive=False):
         reg = re.compile('(\d+)-(\d+)-(\d+)')
         labels, feat = [],[]
         speakers = []
         for file in files:
             label = int(reg.match(file).group(2))
             speaker = reg.match(file).group(1)
+            path = cfg.data_dir if not interactive else cfg.monitor_dir+ file
             try:
-                rate, sig = wav.read(cfg.data_dir + file)
+                rate, sig = wav.read(path)
             except Exception as e:
-                print('fail to read %s' % file)
+                print('fail to read %s' %  path)
                 continue
             sig = sig[:,0] # single channel
             labels.append(label)
@@ -120,7 +121,7 @@ class Reader:
             for item in l:
                 if item not in done:
                     print('detected %s' % item)
-                    feat, labels, speakers = self.read_data([item])
+                    feat, labels, speakers = self.read_data([item], interactive=True)
                     yield 0, 1, feat, labels, l
                     done.add(item)
             time.sleep(1)
