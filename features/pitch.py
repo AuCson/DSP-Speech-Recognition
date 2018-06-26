@@ -3,7 +3,7 @@
 Author: Xisen Jin
 Date: 2018.05.24
 
-Pitch detection using cesptrum
+Pitch detection using cepstrum
 """
 import sys
 sys.path.insert(0, '../')
