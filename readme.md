@@ -1,8 +1,25 @@
-15307130053-09-13.wav
-15307130185-01-20.wav 风声
-15307130079-05-05.wav
-79 83 这两位同学有毒
+# Digital Signal Processing - Speech Recognition
 
-15307130350-14-15.wav
-15307130154-12-08.wav
-对整个数据集做一次噪声级别处理
+COMP130139.01 Digital Signal Processing（数字信号处理） Course Project. 20-word(tiny!) speech recognition.
+
+- Classifier:
+  - RNN
+  - Hierarchical RNN
+  - Hierarchical Multiscale RNN
+  - SVM(for pitch features)
+  
+- Features:
+  - MFCC, delta MFCC
+  - Pitch features computed based on cepstrums and auto-correlation
+
+- Other:
+  - Endpoint detection
+  - Adversarial feature distilling(domain adaptation for speakers)
+  - Ensembled models
+
+- Accuracy: 
+  - 97.1% on devlopment set.
+  
+More details included in the report.
+  
+> 难得遇到这么充实的一门课
