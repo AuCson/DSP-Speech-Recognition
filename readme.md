@@ -1,6 +1,6 @@
 # Digital Signal Processing - Speech Recognition
 
-COMP130139.01 Digital Signal Processing（数字信号处理） Course Project. 20-word(tiny!) speech recognition.
+COMP130139.01 Digital Signal Processing（数字信号处理） Course Project. 20-word(tiny!) speech recognition, which includes very confusing word pairs.
 
 - Classifier:
   - RNN
@@ -18,7 +18,7 @@ COMP130139.01 Digital Signal Processing（数字信号处理） Course Project. 
   - Ensembled models
 
 - Accuracy: 
-  - 97.1% on devlopment set.
+  - 97.1% on development set.
   
 More details included in the report.
   
