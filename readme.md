@@ -21,5 +21,4 @@ COMP130139.01 Digital Signal Processing（数字信号处理） Course Project. 
   - 97.1% on development set.
   
 More details included in the report.
-  
-> 难得遇到这么充实的一门课
+ 
